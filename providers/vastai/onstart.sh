@@ -223,11 +223,14 @@ print(f"[onstart] /etc/environment now has correct PORTAL_CONFIG ({len(val)} cha
 # Now remove stale /etc/portal.yaml + /etc/Caddyfile and restart the
 # services that read PORTAL_CONFIG. instance_portal regenerates
 # /etc/portal.yaml; caddy_config_manager regenerates /etc/Caddyfile;
-# the comfyui supervisor script will now find "ComfyUI" in portal.yaml.
+# the comfyui supervisor script will now find "ComfyUI" in portal.yaml;
+# tunnel_manager serves /get-direct-url which the Portal's "Launch
+# Application" buttons hit to resolve external URLs (without it, the
+# Portal renders but every Launch button toasts "No URL is available").
 echo "[onstart] removing /etc/portal.yaml + /etc/Caddyfile so they regenerate"
 rm -f /etc/portal.yaml /etc/Caddyfile
 if command -v supervisorctl >/dev/null 2>&1; then
-  supervisorctl restart instance_portal caddy comfyui 2>&1 | sed 's/^/[onstart] /'
+  supervisorctl restart instance_portal tunnel_manager caddy comfyui 2>&1 | sed 's/^/[onstart] /'
 fi
 
 # DO NOT start supervisord here. The image's /etc/vast_boot.d pipeline
