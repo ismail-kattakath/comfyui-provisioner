@@ -2,7 +2,7 @@
 
 Generic, idempotent ComfyUI provisioner for cloud GPU rentals (VastAI, RunPod) and local dev. Bring your own `NODE_MAP` / `MODEL_MAP` / workflows.
 
-Designed to be used as a git submodule inside your **stack repo** — the place where your custom-node pins, model URLs, and workflow JSONs live. This repo provides the framework (phases, idempotency, token handling, parallel-safe loops); your stack repo provides the *what* (which nodes, which models, which workflows).
+This repo is **self-contained at runtime** — provider bootstraps (`providers/*/onstart.sh`) clone this framework directly. You may also vendor it into your stack repo as a git submodule for local-dev convenience, but doing so is **not required** and explicitly **not used at runtime** on cloud instances.
 
 ## Repo layout
 
@@ -39,7 +39,7 @@ Each phase is safe to re-run: clones become pulls, completed downloads are skipp
 
 ## The config contract
 
-Your stack repo must provide a `provisioner-config.sh` that defines five bash arrays:
+Your stack repo must provide a `provisioner-config.sh` at its root that defines five bash arrays:
 
 ```bash
 # provisioner-config.sh — in your stack repo
@@ -69,41 +69,39 @@ WORKFLOW_MAP=(
 )
 ```
 
-Set `PROVISIONER_CONFIG=/path/to/your/provisioner-config.sh` before running the provisioner. The provider bootstraps (`providers/*/onstart.sh`) do this automatically.
+Set `PROVISIONER_CONFIG=/path/to/your/provisioner-config.sh` and `WORKFLOWS_SRC_DIR=/path/to/your/comfyui` before running the provisioner. The provider bootstraps (`providers/*/onstart.sh`) do this automatically — see each provider's README.
 
 ## Quick start (VastAI)
 
 ```bash
-# 1. Create your stack repo with provisioner-config.sh + comfyui/ workflows + this as submodule
-
-# 2. Rent + provision in one shot
+# Rent + provision in one shot — the onstart fetches this repo from main HEAD directly
 vastai create instance <offer-id> \
   --image vastai/comfy:v0.22.0-cuda-12.9-py312 \
   --disk 200 \
   --env "-e HF_TOKEN=... -e CIVITAI_API_KEY=... -e GH_TOKEN=... -e STACK_REPO=you/your-stack" \
   --onstart-cmd 'bash <(curl -fsSL https://raw.githubusercontent.com/ismail-kattakath/comfyui-provisioner/main/providers/vastai/onstart.sh)'
 
-# 3. After ~12-15 min, ComfyUI is at http://<vast-ip>:18188
+# After ~12-15 min, ComfyUI is at http://<vast-ip>:18188
 ```
 
-See `providers/vastai/README.md` for full VastAI usage.
+See `providers/vastai/README.md` for full details.
 
-## Required env vars
+## Required env vars (at provisioner runtime)
 
 | Var | When required | Purpose |
 |---|---|---|
 | `HF_TOKEN` | always | HuggingFace downloads (gated + Bearer auth) |
-| `STACK_REPO` | provider bootstraps | `owner/repo` of your stack |
-| `GH_TOKEN` | if `STACK_REPO` is private | GitHub PAT with `repo` scope |
+| `STACK_REPO` | provider bootstraps | `owner/repo` of your stack (cloned by onstart) |
+| `GH_TOKEN` | if `STACK_REPO` is private | GitHub PAT with `repo` read scope |
 | `CIVITAI_API_KEY` | Phase 5 if `MODEL_MAP_CIVITAI` is non-empty | Civitai downloads |
 | `PROVISIONER_CONFIG` | manual runs | Path to `provisioner-config.sh` (provider bootstraps set this automatically) |
-| `WORKFLOWS_SRC_DIR` | manual runs | Path to dir containing workflow JSONs (default: `$SCRIPT_DIR/../../comfyui`) |
+| `WORKFLOWS_SRC_DIR` | manual runs | Path to dir containing workflow JSONs (provider bootstraps set this too) |
 | `COMFYUI_DIR` | if auto-detect fails | Override ComfyUI install path |
 | `COMFY_PIP` | if auto-detect fails | Override pip binary path |
 
 ## Providers
 
-- **VastAI** (`providers/vastai/`) — fully implemented. Use as your primary deploy target.
+- **VastAI** (`providers/vastai/`) — fully implemented. Self-contained onstart: clones this repo + your stack repo independently.
 - **RunPod** (`providers/runpod/`) — stub. Same provisioner works; needs the pod-startup wrapper. PRs welcome.
 - **Local** (`providers/local/`) — macOS/Linux dev launcher. Useful for testing workflows against your own machine before renting GPU.
 
@@ -111,13 +109,14 @@ See `providers/vastai/README.md` for full VastAI usage.
 
 Most "ComfyUI deploy" repos hardcode a single stack (model picks, node versions). When your stack changes, you fork. This repo separates **framework** from **config**:
 
-- **Framework** (this repo, public): how to provision a ComfyUI instance idempotently across providers
+- **Framework** (this repo, public, MIT): how to provision a ComfyUI instance idempotently across providers
 - **Config** (your stack repo, private if needed): what to provision
 
 Result:
 - One generic provisioner. Anyone can reuse it for unrelated ComfyUI projects.
 - Your stack stays private/proprietary while the deployment logic is open and improvable.
 - Provider-specific quirks live in `providers/*/`. Adding a new cloud means writing one onstart script — no fork.
+- **Cloud provisioning works even if your stack repo doesn't vendor this framework as a submodule.** The onstart pulls both repos directly; no submodule traversal at runtime.
 
 ## License
 
