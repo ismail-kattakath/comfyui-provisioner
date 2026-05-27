@@ -1,14 +1,14 @@
 {
-  "_comment": "VastAI instance template for ComfyUI provisioning. The onstart_cmd pulls this repo + your stack repo independently — NO submodule of comfyui-provisioner inside the stack is required.",
+  "_comment": "VastAI instance template for ComfyUI provisioning. The framework wires itself into the image's PROVISIONING_SCRIPT hook (NOT --onstart-cmd, which bypasses workspace sync + supervisord). Set the four REPLACE_ME values, then `vastai create instance <offer> --image ... --env ...`.",
   "image": "vastai/comfy:v0.22.0-cuda-12.9-py312",
   "disk": 200,
-  "ports": "18188:18188",
   "env": {
+    "PROVISIONING_SCRIPT": "https://raw.githubusercontent.com/ismail-kattakath/comfyui-provisioner/main/providers/vastai/onstart.sh",
     "HF_TOKEN": "REPLACE_ME",
-    "CIVITAI_API_KEY": "REPLACE_ME",
+    "CIVITAI_API_KEY": "REPLACE_ME_or_omit_if_no_civitai_models",
     "GH_TOKEN": "REPLACE_ME_if_STACK_REPO_is_private",
     "STACK_REPO": "owner/your-stack-repo",
     "STACK_BRANCH": "main"
   },
-  "onstart_cmd": "bash <(curl -fsSL https://raw.githubusercontent.com/ismail-kattakath/comfyui-provisioner/main/providers/vastai/onstart.sh)"
+  "_usage": "vastai create instance <offer-id> --image vastai/comfy:v0.22.0-cuda-12.9-py312 --disk 200 --env \"-p 1111:1111 -p 8080:8080 -p 8188:8188 -p 8288:8288 -p 8384:8384 -e PROVISIONING_SCRIPT=https://raw.githubusercontent.com/ismail-kattakath/comfyui-provisioner/main/providers/vastai/onstart.sh -e HF_TOKEN=hf_... -e STACK_REPO=owner/your-stack\" --ssh --direct"
 }

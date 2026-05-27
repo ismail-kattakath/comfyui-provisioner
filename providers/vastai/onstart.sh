@@ -1,14 +1,28 @@
 #!/usr/bin/env bash
 # providers/vastai/onstart.sh
 #
-# VastAI --onstart-cmd bootstrap. Self-contained: this script clones the
-# provisioner framework (this repo) AND the stack repo INDEPENDENTLY — no
-# recursive submodule descent. The submodule layout that ships in the stack
-# repo is purely a local-dev convenience and intentionally NOT used at runtime,
-# because nested submodule clones can't reuse the top-level GH_TOKEN.
+# VastAI provisioning script — wires the framework + stack into vastai/comfy's
+# built-in PROVISIONING_SCRIPT hook (NOT --onstart-cmd, which bypasses the
+# image's normal boot pipeline).
 #
-# Usage (wire this into VastAI's --onstart-cmd):
-#   bash <(curl -fsSL https://raw.githubusercontent.com/ismail-kattakath/comfyui-provisioner/main/providers/vastai/onstart.sh)
+# Self-contained: clones the provisioner framework AND the stack repo
+# INDEPENDENTLY — no recursive submodule descent. The submodule layout that
+# may ship inside a stack repo is purely a local-dev convenience and
+# intentionally not used at runtime (nested submodule clones can't reuse
+# the top-level GH_TOKEN).
+#
+# Usage — set PROVISIONING_SCRIPT in the instance env at create time:
+#   vastai create instance <offer> \
+#     --image vastai/comfy:v0.22.0-cuda-12.9-py312 \
+#     --env "-e HF_TOKEN=hf_xxx \
+#            -e STACK_REPO=owner/your-stack \
+#            -e PROVISIONING_SCRIPT=https://raw.githubusercontent.com/ismail-kattakath/comfyui-provisioner/main/providers/vastai/onstart.sh"
+#
+# DO NOT use --onstart-cmd. The image's vast_boot.d pipeline (workspace sync,
+# supervisord launch, service startup) only runs when /root/onstart.sh is
+# left as the image default. PROVISIONING_SCRIPT is invoked at the correct
+# point (Phase 9 of the image's provisioner) AFTER workspace sync and BEFORE
+# the ComfyUI service starts.
 #
 # Required env (from --env at instance create):
 #   HF_TOKEN          HuggingFace token (gated models + workflow fallbacks)
@@ -84,22 +98,10 @@ echo "[onstart] WORKFLOWS_SRC_DIR=$WORKFLOWS_SRC_DIR"
 
 bash "$PROVISIONER_DIR/scripts/provision-comfyui.sh"
 
-# The vastai/comfy image relies on supervisord to bring up ComfyUI, the
-# Instance Portal, Jupyter, etc. Its default /root/onstart.sh launches
-# supervisord — but because --onstart-cmd OVERWRITES that file, we have
-# to start supervisord ourselves once provisioning finishes. Without
-# this, port 1111 (Portal), 18188 (ComfyUI), and 8080 (Jupyter) stay
-# closed and the VastAI "Open" button 404s.
-if command -v supervisord >/dev/null 2>&1 \
-   && [ -f /etc/supervisor/supervisord.conf ] \
-   && ! pgrep -x supervisord >/dev/null 2>&1; then
-  echo "[onstart] starting supervisord (managed services: comfyui, portal, jupyter, ...)"
-  # Daemonize so this script can exit cleanly. supervisord forks and
-  # detaches when -n is omitted.
-  supervisord -c /etc/supervisor/supervisord.conf || \
-    echo "[onstart] WARN: supervisord failed to start — services will not come up"
-else
-  echo "[onstart] supervisord not present or already running — skipping service start"
-fi
+# DO NOT start supervisord here. The image's /etc/vast_boot.d pipeline
+# launches it BEFORE our script runs (65-supervisor-launch.sh) and removes
+# the /.provisioning flag AFTER (95-supervisor-wait.sh), at which point
+# supervisord starts the ComfyUI service automatically. Starting supervisord
+# from this script would race the image's own startup.
 
-echo "[onstart] provisioning complete -- ComfyUI should be reachable on the instance's port 18188"
+echo "[onstart] provisioning complete -- ComfyUI will start on port 18188 once /.provisioning is removed by the image"

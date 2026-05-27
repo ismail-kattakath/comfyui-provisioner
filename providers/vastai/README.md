@@ -4,7 +4,9 @@ Provisions ComfyUI on a fresh VastAI rental in ~12-15 minutes.
 
 ## Architecture
 
-`onstart.sh` runs at first boot and is fully self-contained — **it does NOT rely on any submodule layout**. It clones two repos independently:
+`onstart.sh` is wired into the vastai/comfy image's `PROVISIONING_SCRIPT` hook — **NOT** `--onstart-cmd`. This matters: `--onstart-cmd` overwrites `/root/onstart.sh` and skips the image's `/etc/vast_boot.d/*` pipeline, which means no workspace sync, no supervisord launch, and ComfyUI never starts. `PROVISIONING_SCRIPT` is invoked at the correct point — after the image syncs `/opt/workspace-internal/ComfyUI` → `/workspace/ComfyUI` and supervisord is staged, but before the ComfyUI service starts.
+
+`onstart.sh` itself is fully self-contained — **it does NOT rely on any submodule layout**. It clones two repos independently:
 
 1. **This provisioner framework** (`comfyui-provisioner`, public) → `/workspace/comfyui-provisioner`
 2. **Your stack repo** (whatever you set as `STACK_REPO`, may be private) → `/workspace/<basename>` (flat clone, no `--recurse-submodules`)
@@ -27,16 +29,28 @@ That's it. No submodule of `comfyui-provisioner` is needed in the stack repo for
 vastai search offers 'gpu_name=RTX_4090 verified=true rentable=true disk_space>=200' \
   --order dph_total --limit 5
 
-# Create instance (replace OFFER_ID with one from above; tokens from your .env)
+# Create instance — PROVISIONING_SCRIPT is the key env var; NO --onstart-cmd.
 vastai create instance <offer-id> \
   --image vastai/comfy:v0.22.0-cuda-12.9-py312 \
   --disk 200 \
-  --env "-e HF_TOKEN=$HF_TOKEN -e CIVITAI_API_KEY=$CIVITAI_API_KEY -e GH_TOKEN=$GITHUB_PAT -e STACK_REPO=owner/your-stack-repo -p 18188:18188" \
-  --onstart-cmd 'bash <(curl -fsSL https://raw.githubusercontent.com/ismail-kattakath/comfyui-provisioner/main/providers/vastai/onstart.sh)'
+  --env "-p 1111:1111 -p 8080:8080 -p 8188:8188 -p 8288:8288 -p 8384:8384 \
+         -e PROVISIONING_SCRIPT=https://raw.githubusercontent.com/ismail-kattakath/comfyui-provisioner/main/providers/vastai/onstart.sh \
+         -e HF_TOKEN=$HF_TOKEN \
+         -e CIVITAI_API_KEY=$CIVITAI_API_KEY \
+         -e GH_TOKEN=$GITHUB_PAT \
+         -e STACK_REPO=owner/your-stack-repo" \
+  --ssh --direct
 
 # Get the new instance's SSH URL (use the direct IP, not the proxied ssh8.vast.ai address)
 vastai ssh-url <new-instance-id>
 ```
+
+The vastai/comfy image's normal boot now drives everything:
+1. `/etc/vast_boot.d/36-sync-workspace.sh` copies ComfyUI into `/workspace/ComfyUI`
+2. `/etc/vast_boot.d/65-supervisor-launch.sh` starts supervisord and touches `/.provisioning`
+3. `/etc/vast_boot.d/75-provisioning-manifest.sh` downloads + runs your `PROVISIONING_SCRIPT`
+4. `/etc/vast_boot.d/95-supervisor-wait.sh` removes `/.provisioning` — supervisord starts ComfyUI
+5. The "Open" button (Instance Portal on port 1111) becomes reachable
 
 ## Required env vars
 
