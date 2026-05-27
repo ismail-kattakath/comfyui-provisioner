@@ -100,6 +100,36 @@ ssh -i ~/.ssh/id_ed25519 -p <port> root@<ip> 'tail -F /workspace/provision.log'
 
 The onstart pipes its full output through `tee` to `/workspace/provision.log`, so you can also pull the log after the fact.
 
+## Re-running provisioning after boot
+
+VastAI doesn't export the boot `--env` vars to SSH sessions, so a naive `bash scripts/provision-comfyui.sh` from a fresh SSH shell aborts with `HF_TOKEN must be set in the environment`. To work around this, `onstart.sh` writes the resolved env (tokens + repo paths) to a 600-permissions file at boot:
+
+```
+/workspace/.provisioner.env        # chmod 600, sourceable
+/workspace/reprovision.sh          # one-shot wrapper that sources the env above
+/root/.bashrc                      # appended with auto-loader for interactive shells
+```
+
+Three ways to re-run after the initial boot completes:
+
+```bash
+# Easiest: the one-shot wrapper. Pulls latest framework + stack first.
+ssh -i ~/.ssh/id_ed25519 -p <port> root@<ip> 'bash /workspace/reprovision.sh'
+
+# Or manually: source the env, then run any provisioner command.
+ssh -i ~/.ssh/id_ed25519 -p <port> root@<ip>
+source /workspace/.provisioner.env
+bash $PROVISIONER_DIR/scripts/provision-comfyui.sh
+
+# Or skip phases — env vars are already set after sourcing.
+source /workspace/.provisioner.env
+SKIP_SYSTEM=1 SKIP_NODES=1 bash $PROVISIONER_DIR/scripts/provision-comfyui.sh
+```
+
+New interactive SSH shells auto-load `/workspace/.provisioner.env` via the appended line in `/root/.bashrc`, so the env vars are available without any explicit `source` step after the first login.
+
+> ⚠️ `/workspace/.provisioner.env` stores the HuggingFace, Civitai, and GitHub tokens in clear text. It's `chmod 600` (root-readable only). Don't `cat` it into a screenshot, paste it into a chat, or copy it off the instance.
+
 ## Tearing down (save fees)
 
 ```bash
