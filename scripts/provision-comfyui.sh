@@ -592,20 +592,14 @@ if [ "${SKIP_MODELS:-0}" != "1" ]; then
     download_model "$rel" "$url"
   done
 
-  legacy_dup="$MODELS/loras/ltx-2.3-22b-distilled-lora-1.1_fro90_ceil72_condsafe.safetensors"
-  if [ -f "$legacy_dup" ]; then
-    log "[rename] removing legacy duplicate $legacy_dup"
-    rm -f "$legacy_dup"
-  fi
-
-  # --- BFS face-swap LoRA from Civitai (needs CIVITAI_API_KEY) ---
+  # --- Civitai downloads (needs CIVITAI_API_KEY; sha256-verified) ---
   if [ -n "${CIVITAI_API_KEY:-}" ]; then
     for entry in "${MODEL_MAP_CIVITAI[@]}"; do
       IFS='|' read -r rel civurl sha <<<"$entry"
       download_civitai "$rel" "$civurl" "$sha"
     done
   else
-    warn "CIVITAI_API_KEY unset — skipping BFS face-swap LoRA download"
+    [ "${#MODEL_MAP_CIVITAI[@]:-0}" -gt 0 ] && warn "CIVITAI_API_KEY unset — skipping ${#MODEL_MAP_CIVITAI[@]} Civitai download(s)"
   fi
 
 else
