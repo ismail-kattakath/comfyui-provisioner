@@ -1,18 +1,25 @@
 #!/usr/bin/env bash
 # provision-comfyui.sh
-# Provision a ComfyUI workspace for four workflows in one pass:
-#   1. "10Eros LikenessGuide I2V v3.2"  (LTX-2.3 video)
-#   2. "BFS - Best Face Swap" on Flux.2 Klein 9B  (Civitai 2027766 / v2610018)
-#   3. "10Eros 10S + MrXin Joined I2V v1"  (LTX-2.3 video; 10S likeness chain +
-#      MrXin V6.1 RIFE interpolation + VRAM/RAM cleanup + JoyCaption uncensored
-#      VLM captioning (replaces QwenVL). Reuses #1's video models.)
-#   4. "Qwen Edit then 10Eros MrXin I2V v1"  (combined: Qwen Image Edit Rapid
-#      AIO -> JoyCaption -> MrXin I2V; reuses all models from #2 + #3.)
-# Idempotent: safe to re-run, resumes interrupted downloads.
-# Supports: macOS (~/comfyui) and Linux (RunPod/Vast.ai worker-comfyui at /workspace/ComfyUI).
 #
-# Target VastAI image: vastai/comfy:v0.22.0-cuda-12.9-py312  (Ubuntu 24.04, Py 3.12, ComfyUI v0.22.0)
-# Recommended GPU:     RTX 4090 (24 GB VRAM). Disk: ~150 GB after models download.
+# Generic ComfyUI provisioner — runs seven idempotent phases against a stack
+# defined externally via $PROVISIONER_CONFIG:
+#   0. Preflight   — env-var checks, ComfyUI install detection, pip detection
+#   1. System      — apt update/upgrade (Linux root) + comfyui-manager pip upgrade
+#   2. Tokens      — write HF / Civitai / GH tokens into ComfyUI's manager config
+#   3. Nodes       — clone / pin custom nodes from NODE_MAP (with ALIAS_MAP renames)
+#   4. Workflows   — stage WORKFLOW_MAP entries from $WORKFLOWS_SRC_DIR (+ fallback URL)
+#   5. Models      — download MODEL_MAP (HF + public URLs) + MODEL_MAP_CIVITAI (sha-verified)
+#   6. Update      — pull latest ComfyUI core + Manager + every unpinned custom node
+#   7. Restart     — supervisorctl restart comfyui  (no-op if HAS_SUPERVISOR=0)
+#
+# Idempotent: safe to re-run. Resumes interrupted downloads, short-circuits on
+# completed files (size + sha256 match), reuses clones, never overwrites tokens.
+#
+# Supported environments:
+#   - macOS dev          (~/comfyui)
+#   - VastAI vastai/comfy  (/opt/workspace-internal/ComfyUI)
+#   - RunPod / worker-comfyui  (/workspace/ComfyUI)
+# Override via COMFYUI_DIR if your install lives elsewhere.
 
 set -euo pipefail
 
@@ -45,6 +52,16 @@ log "HF_TOKEN: $(mask "$HF_TOKEN")"
 # config file. Set PROVISIONER_CONFIG to its path, e.g.:
 #   PROVISIONER_CONFIG=/workspace/your-stack-repo/provisioner-config.sh
 # If unset, looks for $SCRIPT_DIR/../../provisioner-config.sh (parent repo convention).
+#
+# Pre-declare all five arrays as empty so phases can safely use ${#ARRAY[@]}
+# under `set -u` even when the config omits some of them. The sourced config
+# overwrites these with its own contents.
+declare -a NODE_MAP=()
+declare -a ALIAS_MAP=()
+declare -a MODEL_MAP=()
+declare -a MODEL_MAP_CIVITAI=()
+declare -a WORKFLOW_MAP=()
+
 SCRIPT_DIR_EARLY="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROVISIONER_CONFIG="${PROVISIONER_CONFIG:-$SCRIPT_DIR_EARLY/../../provisioner-config.sh}"
 if [ -f "$PROVISIONER_CONFIG" ]; then
@@ -122,10 +139,13 @@ mkdir -p \
   "$MODELS"/text_encoders \
   "$MODELS"/latent_upscale_models \
   "$MODELS"/vae \
-  "$MODELS"/loras/ltx23 \
-  "$MODELS"/loras/Klein \
+  "$MODELS"/loras \
   "$WORKFLOWS" \
   "$(dirname "$MANAGER_CFG")"
+# Note: model subdirectories beyond the common set above are created on
+# demand by download_model (mkdir -p "$(dirname "$dest")") when MODEL_MAP
+# entries reference them — e.g. "loras/my-subdir/foo.safetensors" works
+# even though loras/my-subdir/ isn't pre-created here.
 
 # Portable filesize helper
 filesize() {
@@ -369,7 +389,7 @@ if [ "${SKIP_WORKFLOW:-0}" != "1" ]; then
   SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
   WORKFLOWS_SRC_DIR="${WORKFLOWS_SRC_DIR:-$SCRIPT_DIR/../../comfyui}"
 
-  if [ "${#WORKFLOW_MAP[@]:-0}" -eq 0 ]; then
+  if [ "${#WORKFLOW_MAP[@]}" -eq 0 ]; then
     warn "WORKFLOW_MAP is empty — define it in your PROVISIONER_CONFIG to stage workflows. Skipping Phase 4."
   else
     for entry in "${WORKFLOW_MAP[@]}"; do
@@ -599,7 +619,7 @@ if [ "${SKIP_MODELS:-0}" != "1" ]; then
       download_civitai "$rel" "$civurl" "$sha"
     done
   else
-    [ "${#MODEL_MAP_CIVITAI[@]:-0}" -gt 0 ] && warn "CIVITAI_API_KEY unset — skipping ${#MODEL_MAP_CIVITAI[@]} Civitai download(s)"
+    [ "${#MODEL_MAP_CIVITAI[@]}" -gt 0 ] && warn "CIVITAI_API_KEY unset — skipping ${#MODEL_MAP_CIVITAI[@]} Civitai download(s)"
   fi
 
 else
