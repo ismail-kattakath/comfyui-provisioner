@@ -1,0 +1,81 @@
+{
+  "mcpServers": {
+    "json-yaml-toml": {
+      "command": "uvx",
+      "args": ["mcp-json-yaml-toml"]
+    },
+    "diff": {
+      "command": "npx",
+      "args": ["-y", "diff-mcp"]
+    },
+    "mcp-jq": {
+      "command": "npx",
+      "args": ["@247arjun/mcp-jq"]
+    },
+    "civitai": {
+      "command": "uvx",
+      "args": ["civitai-mcp-ultimate"]
+    },
+    "huggingface": {
+      "type": "http",
+      "url": "https://huggingface.co/mcp"
+    },
+    "github": {
+      "command": "docker",
+      "args": ["run", "-i", "--rm", "-e", "GITHUB_PERSONAL_ACCESS_TOKEN", "ghcr.io/github/github-mcp-server"]
+    },
+    "vast-ai": {
+      "command": "uvx",
+      "args": ["--with", "mcp==1.9.4", "--from", "git+https://github.com/CryDevOk/vastai-mcp.git", "vast-mcp-server"]
+    },
+    "dockerhub": {
+      "command": "bash",
+      "args": ["-c", "node \"$HOME/.mcp-servers/hub-mcp/dist/index.js\" --transport=stdio"]
+    },
+    "sequentialthinking": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-sequential-thinking"]
+    },
+    "memory": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-memory"]
+    },
+    "duckduckgo": {
+      "type": "stdio",
+      "command": "uvx",
+      "args": ["duckduckgo-mcp-server"]
+    },
+    "context7": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@upstash/context7-mcp"]
+    },
+    "fetch": {
+      "type": "stdio",
+      "command": "uvx",
+      "args": ["mcp-server-fetch"]
+    },
+    "desktop-commander": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@wonderwhy-er/desktop-commander@latest"]
+    },
+    "homebrew": {
+      "command": "uvx",
+      "args": ["homebrew-mcp"]
+    },
+    "ollama": {
+      "command": "npx",
+      "args": ["-y", "ollama-mcp"],
+      "env": {
+        "OLLAMA_HOST": "http://127.0.0.1:11434"
+      }
+    },
+    "runpod": {
+      "command": "npx",
+      "args": ["-y", "@runpod/mcp-server@latest"]
+    }
+  }
+}

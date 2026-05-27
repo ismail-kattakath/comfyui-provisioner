@@ -1,0 +1,9 @@
+{
+  "executionEnvironments": [
+    {
+      "root": "serverless/10eros-i2v-ui",
+      "venvPath": "serverless/10eros-i2v-ui",
+      "venv": ".venv"
+    }
+  ]
+}

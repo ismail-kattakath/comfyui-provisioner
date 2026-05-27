@@ -19,3 +19,6 @@ __pycache__/
 provision.log
 provision_*.log
 provision.pid
+
+# Claude Code plugin local config files
+*.local.md
