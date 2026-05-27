@@ -29,6 +29,12 @@
 
 set -euo pipefail
 
+# Mirror all output to /workspace/provision.log so the log survives the boot
+# even when onstart-cmd output isn't captured by the caller. tee -a is safe
+# on re-runs: appends, doesn't truncate.
+mkdir -p /workspace
+exec > >(tee -a /workspace/provision.log) 2>&1
+
 : "${HF_TOKEN:?HF_TOKEN must be set via --env}"
 : "${STACK_REPO:?STACK_REPO must be set via --env (format: owner/repo)}"
 
