@@ -1,0 +1,21 @@
+# Local environment + secrets
+.env
+.env.local
+.env.*.local
+
+# Claude Code workspace (personal/local state)
+.claude/settings.local.json
+.claude/projects/
+.claude/worktrees/
+.claude/*.lock
+
+# IDE / dev caches
+.mypy_cache/
+__pycache__/
+*.pyc
+.DS_Store
+
+# Provisioning runtime artifacts (only created when running on a host)
+provision.log
+provision_*.log
+provision.pid
