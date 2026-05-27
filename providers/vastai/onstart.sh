@@ -84,4 +84,22 @@ echo "[onstart] WORKFLOWS_SRC_DIR=$WORKFLOWS_SRC_DIR"
 
 bash "$PROVISIONER_DIR/scripts/provision-comfyui.sh"
 
+# The vastai/comfy image relies on supervisord to bring up ComfyUI, the
+# Instance Portal, Jupyter, etc. Its default /root/onstart.sh launches
+# supervisord — but because --onstart-cmd OVERWRITES that file, we have
+# to start supervisord ourselves once provisioning finishes. Without
+# this, port 1111 (Portal), 18188 (ComfyUI), and 8080 (Jupyter) stay
+# closed and the VastAI "Open" button 404s.
+if command -v supervisord >/dev/null 2>&1 \
+   && [ -f /etc/supervisor/supervisord.conf ] \
+   && ! pgrep -x supervisord >/dev/null 2>&1; then
+  echo "[onstart] starting supervisord (managed services: comfyui, portal, jupyter, ...)"
+  # Daemonize so this script can exit cleanly. supervisord forks and
+  # detaches when -n is omitted.
+  supervisord -c /etc/supervisor/supervisord.conf || \
+    echo "[onstart] WARN: supervisord failed to start — services will not come up"
+else
+  echo "[onstart] supervisord not present or already running — skipping service start"
+fi
+
 echo "[onstart] provisioning complete -- ComfyUI should be reachable on the instance's port 18188"
