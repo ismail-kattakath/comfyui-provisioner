@@ -13,7 +13,7 @@ Then sets `PROVISIONER_CONFIG=<stack>/provisioner-config.sh` + `WORKFLOWS_SRC_DI
 
 ## One-time setup
 
-Your stack repo (e.g. `ismail-kattakath/genai-workflows`) must contain at its root:
+Your stack repo (whatever you set as `STACK_REPO`) must contain at its root:
 
 - `provisioner-config.sh` — exports `NODE_MAP`, `ALIAS_MAP`, `MODEL_MAP`, `MODEL_MAP_CIVITAI`, `WORKFLOW_MAP`
 - `comfyui/` — directory of workflow JSONs (+ optional `comfy.settings.json`)
@@ -31,7 +31,7 @@ vastai search offers 'gpu_name=RTX_4090 verified=true rentable=true disk_space>=
 vastai create instance <offer-id> \
   --image vastai/comfy:v0.22.0-cuda-12.9-py312 \
   --disk 200 \
-  --env "-e HF_TOKEN=$HF_TOKEN -e CIVITAI_API_KEY=$CIVITAI_API_KEY -e GH_TOKEN=$GITHUB_PAT -e STACK_REPO=ismail-kattakath/genai-workflows -p 18188:18188" \
+  --env "-e HF_TOKEN=$HF_TOKEN -e CIVITAI_API_KEY=$CIVITAI_API_KEY -e GH_TOKEN=$GITHUB_PAT -e STACK_REPO=owner/your-stack-repo -p 18188:18188" \
   --onstart-cmd 'bash <(curl -fsSL https://raw.githubusercontent.com/ismail-kattakath/comfyui-provisioner/main/providers/vastai/onstart.sh)'
 
 # Get the new instance's SSH URL (use the direct IP, not the proxied ssh8.vast.ai address)

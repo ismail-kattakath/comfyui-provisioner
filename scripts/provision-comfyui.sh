@@ -43,7 +43,7 @@ log "HF_TOKEN: $(mask "$HF_TOKEN")"
 # ---------- Config (NODE_MAP, ALIAS_MAP, MODEL_MAP, MODEL_MAP_CIVITAI, WORKFLOW_MAP) ----------
 # This provisioner is generic — the stack-specific lists live in an external
 # config file. Set PROVISIONER_CONFIG to its path, e.g.:
-#   PROVISIONER_CONFIG=/workspace/genai-workflows/provisioner-config.sh
+#   PROVISIONER_CONFIG=/workspace/your-stack-repo/provisioner-config.sh
 # If unset, looks for $SCRIPT_DIR/../../provisioner-config.sh (parent repo convention).
 SCRIPT_DIR_EARLY="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROVISIONER_CONFIG="${PROVISIONER_CONFIG:-$SCRIPT_DIR_EARLY/../../provisioner-config.sh}"

@@ -13,7 +13,6 @@
 # Required env (from --env at instance create):
 #   HF_TOKEN          HuggingFace token (gated models + workflow fallbacks)
 #   STACK_REPO        owner/repo containing provisioner-config.sh + comfyui/
-#                     (e.g. ismail-kattakath/genai-workflows)
 #
 # Required if STACK_REPO is private:
 #   GH_TOKEN          GitHub PAT with read access to STACK_REPO
