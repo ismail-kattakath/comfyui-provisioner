@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 # providers/vastai/onstart.sh
 #
-# VastAI provisioning script — wires the framework + stack into vastai/comfy's
-# built-in PROVISIONING_SCRIPT hook (NOT --onstart-cmd, which bypasses the
-# image's normal boot pipeline).
+# VastAI provisioning script — invoked by the vastai/comfy image's declarative
+# provisioner as Phase 9 ("Provisioning script"), AFTER workspace sync and
+# supervisord launch but BEFORE the /.provisioning flag is cleared. This is
+# the right point in the boot pipeline: ComfyUI's main.py won't start until
+# we exit, so models/nodes/workflows are in place before service startup.
 #
 # Self-contained: clones the provisioner framework AND the stack repo
 # INDEPENDENTLY — no recursive submodule descent. The submodule layout that
@@ -11,18 +13,24 @@
 # intentionally not used at runtime (nested submodule clones can't reuse
 # the top-level GH_TOKEN).
 #
-# Usage — set PROVISIONING_SCRIPT in the instance env at create time:
-#   vastai create instance <offer> \
-#     --image vastai/comfy:v0.22.0-cuda-12.9-py312 \
-#     --env "-e HF_TOKEN=hf_xxx \
-#            -e STACK_REPO=owner/your-stack \
-#            -e PROVISIONING_SCRIPT=https://raw.githubusercontent.com/ismail-kattakath/comfyui-provisioner/main/providers/vastai/onstart.sh"
+# Wiring on a VastAI instance (vastai create instance ...):
+#   --onstart-cmd '/opt/instance-tools/bin/entrypoint.sh'      <-- image normal boot
+#   --env "-e PROVISIONING_SCRIPT=<url-to-this-file> \
+#          -e HF_TOKEN=hf_xxx \
+#          -e STACK_REPO=owner/your-stack \
+#          -e PORTAL_CONFIG=... \
+#          -e COMFYUI_ARGS=... \
+#          ..."
 #
-# DO NOT use --onstart-cmd. The image's vast_boot.d pipeline (workspace sync,
-# supervisord launch, service startup) only runs when /root/onstart.sh is
-# left as the image default. PROVISIONING_SCRIPT is invoked at the correct
-# point (Phase 9 of the image's provisioner) AFTER workspace sync and BEFORE
-# the ComfyUI service starts.
+# See providers/vastai/template.json for the full env-var set and
+# providers/vastai/README.md for the full create command + rationale.
+#
+# DO NOT use --onstart-cmd with curl|bash directly — that overwrites
+# /root/onstart.sh and skips the image's vast_boot.d pipeline. The Open
+# button 404s, Caddy never binds, ComfyUI never starts. Invoking
+# entrypoint.sh as the onstart command lets the image set up everything
+# (workspace sync, supervisord with full env, services) and runs this
+# script via its PROVISIONING_SCRIPT hook at the correct phase.
 #
 # Required env (from --env at instance create):
 #   HF_TOKEN          HuggingFace token (gated models + workflow fallbacks)
