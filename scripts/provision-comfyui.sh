@@ -72,15 +72,22 @@ else
   warn "PROVISIONER_CONFIG not found at $PROVISIONER_CONFIG — NODE_MAP/MODEL_MAP* must be set in the environment or Phases 3, 4, 5 will be no-ops."
 fi
 
-# Detect COMFYUI_DIR — check known install locations across common images.
-# vastai/comfy installs at /opt/workspace-internal/ComfyUI (with /workspace
-# as a separate persistent volume); worker-comfyui and bare RunPod images
-# use /workspace/ComfyUI; macOS dev uses ~/comfyui.
+# Detect COMFYUI_DIR — check runtime locations first, fall back to image
+# source locations only if no runtime copy exists.
+#
+# IMPORTANT: order matters. On vastai/comfy, BOTH paths exist after the
+# image's 36-sync-workspace.sh runs:
+#   /workspace/ComfyUI            — the RUNTIME location (supervisor's
+#                                    comfyui.sh launches python main.py here)
+#   /opt/workspace-internal/ComfyUI — the SOURCE that 36-sync-workspace.sh
+#                                    copies FROM into /workspace
+# Provisioning into /opt/... would be silently dropped — ComfyUI doesn't
+# read from there. Always prefer /workspace/ComfyUI when both exist.
 COMFYUI_CANDIDATES=(
-  "/opt/workspace-internal/ComfyUI"
   "/workspace/ComfyUI"
   "/comfyui"
   "$HOME/comfyui"
+  "/opt/workspace-internal/ComfyUI"
 )
 if [ -z "${COMFYUI_DIR:-}" ]; then
   for cand in "${COMFYUI_CANDIDATES[@]}"; do
