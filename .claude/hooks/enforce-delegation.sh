@@ -58,12 +58,9 @@ case "$TOOL_NAME" in
       jq|grep|wc|find|ls|cat|head|tail)
         is_readonly=1
         ;;
-      git)
-        SECOND_TOKEN="$(printf '%s' "$CMD" | sed -E 's/^[[:space:]]+//' | awk '{print $2}')"
-        case "$SECOND_TOKEN" in
-          log|status|diff|show) is_readonly=1 ;;
-        esac
-        ;;
+      # NOTE: `git status|diff|log|show` are intentionally NOT counted.
+      # They are operational (commit ceremony, "what changed", etc.), not
+      # codebase exploration — the rule targets discovery, not git introspection.
     esac
     ;;
   mcp__*)
