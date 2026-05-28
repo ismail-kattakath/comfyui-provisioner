@@ -106,9 +106,76 @@ Local project MCPs always override `MCP_DOCKER` equivalents. Never use `Bash(cur
 
 ## Agent Spawning
 
-Background subagents and team teammates MUST use `model: "sonnet"` — pass it explicitly on every `Agent({...})` call that runs with `run_in_background: true`. Foreground one-shot agents may inherit from the lead.
+### Subagents vs Agent Teams
 
-When operating as Lead in a team workflow:
-1. Every `Agent({...})` call MUST include `run_in_background: true`. A PreToolUse hook blocks calls without it.
-2. End the turn immediately after delegation. The notification re-invocation mechanism requires the current turn to end.
-3. On re-invocation: check the result, decide whether to spawn another subagent or end silently. Don't summarize subagent work unprompted.
+| Pattern | Use when |
+|---------|----------|
+| **Background subagent** | Side task reports a summary back; workers don't need to talk to each other |
+| **Agent Team** | Workers need to share findings, debate hypotheses, or coordinate on their own |
+| **Skill** | Reusable prompt/workflow that runs in the main conversation context (no isolation) |
+
+Subagents cannot spawn other subagents. Nested delegation must be chained from the main conversation (Lead) directly.
+
+### Dispatching background subagents
+
+Every `Agent({...})` call MUST include `run_in_background: true`. A `PreToolUse` hook blocks calls without it.
+
+```python
+Agent({
+  description: "Short task label shown in the UI",
+  prompt: "...",                        # fully self-contained — subagent has no conversation history
+  subagent_type: "vastai-stack-deployer",  # optional: use a named .claude/agents/ definition
+  model: "sonnet",                      # always explicit; see model resolution order below
+  name: "bfs-deployer",                 # optional: makes the subagent resumable via SendMessage
+  run_in_background: True,              # REQUIRED — hook blocks if missing
+  isolation: "worktree",                # optional: isolated git checkout; auto-cleaned if no edits
+  mode: "acceptEdits",                  # optional: override permission mode for this invocation
+})
+```
+
+**Model resolution order** (first match wins):
+1. `CLAUDE_CODE_SUBAGENT_MODEL` env var
+2. Per-call `model` parameter
+3. Subagent definition `model` frontmatter
+4. Main conversation's model (inherited)
+
+Always pass `model: "sonnet"` explicitly on background calls — never let a background worker inherit opus cost.
+
+### The Lead end-turn rule
+
+After dispatching background subagents:
+1. **End the turn immediately.** The re-invocation (interrupt) mechanism only fires after the current turn ends. Blocking here deadlocks the workflow — the `Stop` hook is configured to approve when subagents are in flight.
+2. **On re-invocation, triage the result:**
+   - **Blocker** (error / missing dep / requires immediate action) → correct, spawn retry, notify user if needed → end turn
+   - **Informational** (progress, partial result) → file it → end turn silently
+3. **Never summarize subagent work unprompted.** Respond to user questions, but don't push unsolicited status updates.
+
+### Resuming named subagents
+
+Give a subagent a `name` to resume it later. After it stops, use `SendMessage` to continue it with full prior context instead of spawning a fresh instance (requires `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`, already set in settings):
+
+```
+Use the stack-verifier subagent to check instance 38169505
+[subagent completes]
+
+Continue that verification and also check the Civitai LoRA
+[Lead sends SendMessage to the same agent ID — full context preserved]
+```
+
+### Project subagent definitions
+
+Custom definitions live in `.claude/agents/*.md` (project scope, version-controlled). Claude uses the `description` field to auto-delegate. The `background: true` frontmatter field makes a definition always run in background — aligns with the `PreToolUse` hook enforcement.
+
+This project defines:
+- `vastai-stack-deployer` — finds an offer, creates an instance, polls until running; reports instance ID + SSH URL
+- `vastai-stack-verifier` — SSH-checks nodes, workflow JSON, models, and ComfyUI HTTP on a running instance
+
+### Teammate rules (Agent Teams)
+
+When operating as Lead with agent teams enabled:
+1. Every `Agent({...})` call MUST include `run_in_background: true`
+2. End the turn immediately after dispatching — do not block
+3. On re-invocation: triage result, spawn next worker or end silently; never summarize unprompted
+4. `TeammateIdle`, `TaskCompleted`, `TaskCreated` hooks enforce quality gates (see `settings.json`)
+5. Use `TaskCreate` / `TaskUpdate` to coordinate shared work; teammates self-claim from the task list
+6. Always use the Lead to clean up the team — never have a teammate run cleanup

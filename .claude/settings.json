@@ -29,7 +29,10 @@
       "mcp__desktop-commander__*",
       "mcp__homebrew__*",
       "mcp__ollama__*",
-      "mcp__runpod__*"
+      "mcp__runpod__*",
+      "PushNotification",
+      "Agent(vastai-stack-deployer)",
+      "Agent(vastai-stack-verifier)"
     ],
     "deny": [],
     "defaultMode": "default"
@@ -63,8 +66,9 @@
         "matcher": "Agent",
         "hooks": [
           {
-            "type": "prompt",
-            "prompt": "Check this Agent tool call. If run_in_background is not set to true, block it: respond 'block: all Agent calls must use run_in_background: true — the Lead must never block waiting for a subagent; set run_in_background: true and retry.' If run_in_background is true, respond with exactly 'approve'."
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/check-agent-call.sh\"",
+            "timeout": 5
           }
         ]
       },
@@ -72,8 +76,9 @@
         "matcher": "Write|Edit",
         "hooks": [
           {
-            "type": "prompt",
-            "prompt": "Check if this file write is safe: no system paths, no credentials, no path traversal (../ sequences). Return 'approve' if safe, 'deny' with reason if not."
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/check-file-write.sh\"",
+            "timeout": 5
           }
         ]
       },
@@ -115,8 +120,9 @@
         "matcher": "*",
         "hooks": [
           {
-            "type": "prompt",
-            "prompt": "A background subagent just stopped and the Lead is about to be re-invoked. Respond with exactly 'approve' and nothing else — do not generate any user-facing message. The Lead's own instructions govern what it does on re-invocation: it will delegate another background subagent if needed, or end its turn silently if not."
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/allow-subagent-stop.sh\"",
+            "timeout": 5
           }
         ]
       }
@@ -127,7 +133,7 @@
         "hooks": [
           {
             "type": "prompt",
-            "prompt": "A teammate is about to go idle. Before approving idle state, verify ALL of the following duties are complete for this teammate's role:\n\n- LogWatcher: Has it (a) captured all runtime + build log errors, (b) written a log digest to memory via mcp__memory__add_observations on entity 'space-fix-current-session', and (c) completed post-fix monitoring if a fix was applied?\n- Investigator: Has it (a) searched memory for prior incidents, (b) committed its final RCA hypothesis to memory, and (c) sent its consensus result to the Lead?\n- Researcher: Has it (a) searched for all surface error strings, (b) written research findings to memory, and (c) either confirmed or refuted the Investigator's hypothesis with explicit evidence?\n- FixEngineer: Has it (a) obtained Lead plan approval before touching files, (b) applied every planned change, (c) written a change summary to memory, and (d) notified Validator?\n- Validator: Has it (a) confirmed clean build logs (single startup, no tracebacks), (b) completed the inference test (PASS or FAIL with evidence), and (c) written the final validation result to memory?\n\nIf any role-specific duty is incomplete, respond with exactly 'block' followed by the specific missing duty so the teammate can complete it. Only approve if all applicable duties are done."
+            "prompt": "A teammate is about to go idle in the comfyui-provisioner project. Before approving, verify the teammate has:\n\n1. Reported its primary result to the lead — instance ID + running status if deploying; explicit PASS or FAIL with evidence if verifying; named list of present/missing nodes if auditing.\n2. If a VastAI instance was created: recorded the instance ID and its actual_status.\n3. If an error was encountered (boot failure, SSH refused, model download failed, poll timeout): explicitly notified the lead with the error details and instance ID.\n4. Left no in-progress actions unresolved (interrupted poll loop, half-written file, uncommitted fix).\n\nIf any of these are incomplete, respond 'block: <specific missing item>'. If all are done or none apply, respond 'approve'."
           }
         ]
       }
@@ -138,7 +144,7 @@
         "hooks": [
           {
             "type": "prompt",
-            "prompt": "A task is being marked complete. Apply these quality gates:\n\n1. If the task name contains 'apply-fix' or 'fix-applied' or 'implement-fix': BLOCK unless the conversation shows Validator has explicitly reported an inference PASS (video URL present). A fix is not done until inference confirms end-to-end function. Respond 'block: fix tasks require Validator inference PASS before closing'.\n\n2. If the task name contains 'analyze-logs-rca' or 'root-cause': BLOCK unless the task description or a teammate message contains a specific root cause statement (not just 'investigating'). Vague analysis does not count. Respond 'block: RCA task requires a specific root cause statement'.\n\n3. If the task name contains 'monitor-build-logs': BLOCK unless the teammate has confirmed either (a) clean startup ('Application Startup' appears once, no errors after it) or (b) a build error (with excerpt). A timeout without either is not completion. Respond 'block: build monitoring requires explicit clean-startup or build-error confirmation'.\n\n4. All other tasks: approve."
+            "prompt": "A task is being marked complete. Apply these quality gates:\n\n1. If the task name contains 'deploy': BLOCK unless an instance ID is recorded and actual_status was confirmed as 'running' via the JSON API. Respond 'block: deploy tasks require instance ID + running status confirmation'.\n\n2. If the task name contains 'verify': BLOCK unless an explicit PASS or FAIL verdict with specific evidence (nodes present, workflow JSON staged, ComfyUI HTTP 200) was reported. A timeout or connection refusal counts as FAIL, not PASS. Respond 'block: verify tasks require explicit PASS or FAIL with evidence'.\n\n3. If the task name contains 'audit': BLOCK unless specific findings are recorded — either 'all expected nodes present' or a named list of missing nodes. 'investigated' or 'checked' without specifics does not count. Respond 'block: audit tasks require specific node findings'.\n\n4. All other tasks: approve."
           }
         ]
       }
@@ -149,7 +155,7 @@
         "hooks": [
           {
             "type": "prompt",
-            "prompt": "A task is being created. Validate that it meets these standards before allowing creation:\n\n1. Name must be in verb-noun kebab-case format (e.g. 'fetch-runtime-logs', 'analyze-logs-rca', 'implement-dep-fix'). Single-word names or names without a verb are not acceptable.\n\n2. The task description must state what 'done' looks like — an explicit acceptance criterion, not just a description of the work.\n\n3. If this task depends on another task's output, the dependency must be named explicitly in the description.\n\nIf any of these are missing, respond with 'block' followed by exactly what needs to be added. If all three are met, approve."
+            "prompt": "A task is being created. It must meet both standards:\n\n1. Name must be verb-noun kebab-case (e.g. 'deploy-bfs-stack', 'verify-likeness-i2v', 'audit-mrxin-deps'). Single-word names or names without a verb are not acceptable.\n\n2. The description must state what 'done' looks like — an explicit acceptance criterion, not just a description of what the work involves.\n\nIf either is missing, respond 'block: <what needs to be added>'. If both are met, respond 'approve'."
           }
         ]
       }
