@@ -2,6 +2,27 @@
 
 Provisions ComfyUI on a fresh VastAI rental in ~12-15 minutes.
 
+## Quickstart — launch via VastAI template (one click)
+
+A registered VastAI template wraps the entire CLI launch into a clickable URL:
+
+- **Template page** (description + readme): https://cloud.vast.ai/template/readme/901e57e8eda5ac1af68bd580cdca885f
+- **Rent page** (skip straight to offer selection): https://cloud.vast.ai/?template_id=438945&template_hash=901e57e8eda5ac1af68bd580cdca885f
+
+What you fill in before clicking Rent:
+
+| Env var | Required? | Note |
+|---|---|---|
+| `HF_TOKEN` | yes | `hf_...` — HuggingFace token |
+| `GH_TOKEN` | yes (private stacks) | `ghp_...` — GitHub PAT with `repo` read scope |
+| `STACK_REPO` | yes | `owner/repo` of your stack (default = `ismail-kattakath/comfyui-stack-qwen-image-edit-aio`) |
+| `CIVITAI_API_KEY` | optional | Required only if your stack has Civitai LoRAs |
+| `VOLUME_ID` | optional | Set the id + add `--link-volume <id> --mount-path /workspace/ComfyUI/models` in the volume section. See "Optional: persistent network volume" below. |
+
+The template bakes in all the fiddly bits (port mappings, `PORTAL_CONFIG`, `COMFYUI_ARGS`, `OPEN_BUTTON_PORT`, `onstart_cmd`, image tag), so the CLI errors I used to make with quoting are designed out.
+
+If you'd rather use the CLI directly, the full command is documented further down — both flows produce identical instances.
+
 ## Architecture
 
 The framework hooks into vastai/comfy at TWO points:
