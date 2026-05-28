@@ -68,6 +68,19 @@
 #   PROVISIONER_BRANCH     Framework branch (default: main)
 #   PROVISIONER_DIR        Where to clone the framework (default: /workspace/comfyui-provisioner)
 #   SKIP_SYSTEM=1 SKIP_NODES=1 SKIP_WORKFLOW=1 SKIP_MODELS=1 SKIP_UPDATE_ALL=1 SKIP_RESTART=1
+#
+# Optional Syncthing pre-pair (replaces the deprecated git-push save-workflow
+# helper — workflow edits now mirror to a local folder on the operator's
+# machine in real time):
+#   SYNCTHING_PEER_DEVICE_ID  Operator's Syncthing device ID (stable across
+#                             instances). When set, onstart.sh adds it as a
+#                             paired peer and creates a sendonly folder share
+#                             for /workspace/ComfyUI/user/default/workflows/.
+#                             The peer accepts the share locally via the
+#                             pair-syncthing skill. Skipped if unset.
+#   SYNCTHING_PEER_NAME       Friendly name for the peer (default: local-peer)
+#   SYNCTHING_FOLDER_ID       Folder ID, must match peer (default: comfyui-workflows)
+#   SYNCTHING_FOLDER_LABEL    Display label (default: "ComfyUI Workflows")
 
 set -euo pipefail
 
@@ -243,6 +256,10 @@ fi
     printf "export VOLUME_ID=%q\n"          "${VOLUME_ID:-}"
     printf "export PERSIST_USER_STATE=%q\n" "${PERSIST_USER_STATE}"
     printf "export PERSIST_OUTPUTS=%q\n"    "${PERSIST_OUTPUTS}"
+    printf "export SYNCTHING_PEER_DEVICE_ID=%q\n" "${SYNCTHING_PEER_DEVICE_ID:-}"
+    printf "export SYNCTHING_PEER_NAME=%q\n"      "${SYNCTHING_PEER_NAME:-}"
+    printf "export SYNCTHING_FOLDER_ID=%q\n"      "${SYNCTHING_FOLDER_ID:-}"
+    printf "export SYNCTHING_FOLDER_LABEL=%q\n"   "${SYNCTHING_FOLDER_LABEL:-}"
   } > /workspace/.provisioner.env
 )
 chmod 600 /workspace/.provisioner.env
@@ -345,5 +362,87 @@ fi
 # launched it before this script ran (65-supervisor-launch.sh) and will
 # remove the /.provisioning flag after (95-supervisor-wait.sh), at
 # which point supervisord starts the comfyui service automatically.
+
+# --- Syncthing folder sync -----------------------------------------------
+# Replaces the deprecated git-push save-workflow.sh helper. The user iterates
+# on workflows in the live ComfyUI UI; Syncthing mirrors every Cmd+S into a
+# local folder on the operator's laptop in real time; the operator commits
+# from the local stack repo when satisfied.
+#
+# Two steps happen here:
+#  (1) Switch the syncthing supervisor entry to user=root. The vastai/comfy
+#      image runs syncthing as user `user`, but ComfyUI writes workflow JSON
+#      as root with mode 0600, so the daemon can't read them. Single-tenant
+#      container, no security concern.
+#  (2) If SYNCTHING_PEER_DEVICE_ID is set, pre-add the operator's laptop as
+#      a paired device and create a sendonly folder share for the workflows
+#      directory. The operator accepts the share locally via the
+#      pair-syncthing skill — one CLI command on the laptop.
+echo "[onstart] === Syncthing folder sync setup ==="
+
+ST_SUP_CONF=/etc/supervisor/conf.d/syncthing.conf
+if [ -f "$ST_SUP_CONF" ] && grep -q '^user=user$' "$ST_SUP_CONF"; then
+  echo "[onstart] switching syncthing supervisor entry to user=root"
+  sed -i 's|^user=user$|user=root|' "$ST_SUP_CONF"
+  sed -i 's|USER=user|USER=root|' "$ST_SUP_CONF"
+  sed -i 's|HOME=/home/user|HOME=/root|' "$ST_SUP_CONF"
+  chown -R root:root /opt/syncthing 2>/dev/null || true
+  supervisorctl reread 2>&1 | sed 's/^/[onstart] /'
+  supervisorctl update syncthing 2>&1 | sed 's/^/[onstart] /'
+fi
+
+ST_GUI_ADDR=127.0.0.1:18384
+ST_API_KEY="${OPEN_BUTTON_TOKEN:-}"
+if [ -z "$ST_API_KEY" ] && [ -f /opt/syncthing/config/config.xml ]; then
+  ST_API_KEY=$(grep -oP '(?<=<apikey>)[^<]+' /opt/syncthing/config/config.xml | head -1)
+fi
+
+# Wait for syncthing API to come up after the supervisor reload
+for i in $(seq 1 30); do
+  if curl -sf -H "X-API-Key: $ST_API_KEY" "http://${ST_GUI_ADDR}/rest/system/status" >/dev/null 2>&1; then
+    echo "[onstart] syncthing API up after ${i}s"
+    break
+  fi
+  sleep 1
+done
+
+ST_CLI=(/opt/syncthing/syncthing cli --gui-address="${ST_GUI_ADDR}" --gui-apikey="${ST_API_KEY}")
+
+# Always log this instance's device ID so the operator can copy it for pairing
+INSTANCE_DEV_ID=$("${ST_CLI[@]}" show system status 2>/dev/null | jq -r '.myID // empty' 2>/dev/null || true)
+if [ -n "$INSTANCE_DEV_ID" ]; then
+  echo "[onstart] syncthing instance device ID: $INSTANCE_DEV_ID"
+fi
+
+if [ -n "${SYNCTHING_PEER_DEVICE_ID:-}" ]; then
+  ST_PEER_NAME="${SYNCTHING_PEER_NAME:-local-peer}"
+  ST_FOLDER_ID="${SYNCTHING_FOLDER_ID:-comfyui-workflows}"
+  ST_FOLDER_LABEL="${SYNCTHING_FOLDER_LABEL:-ComfyUI Workflows}"
+  ST_FOLDER_PATH="${COMFYUI_DIR:-/workspace/ComfyUI}/user/default/workflows"
+
+  if ! "${ST_CLI[@]}" config devices list 2>/dev/null | grep -qF "$SYNCTHING_PEER_DEVICE_ID"; then
+    "${ST_CLI[@]}" config devices add --device-id "$SYNCTHING_PEER_DEVICE_ID" --name "$ST_PEER_NAME"
+    "${ST_CLI[@]}" config devices "$SYNCTHING_PEER_DEVICE_ID" compression set always
+    echo "[onstart] added peer device $SYNCTHING_PEER_DEVICE_ID ($ST_PEER_NAME)"
+  fi
+
+  if ! "${ST_CLI[@]}" config folders list 2>/dev/null | grep -qF "$ST_FOLDER_ID"; then
+    "${ST_CLI[@]}" config folders add --id "$ST_FOLDER_ID" --label "$ST_FOLDER_LABEL" \
+      --path "$ST_FOLDER_PATH" --type sendonly
+    echo "[onstart] created sendonly folder share $ST_FOLDER_ID -> $ST_FOLDER_PATH"
+  fi
+
+  if ! "${ST_CLI[@]}" config folders "$ST_FOLDER_ID" devices list 2>/dev/null | grep -qF "$SYNCTHING_PEER_DEVICE_ID"; then
+    "${ST_CLI[@]}" config folders "$ST_FOLDER_ID" devices add --device-id "$SYNCTHING_PEER_DEVICE_ID"
+    echo "[onstart] sharing $ST_FOLDER_ID with $SYNCTHING_PEER_DEVICE_ID"
+  fi
+
+  echo "[onstart] syncthing pre-pair complete"
+  echo "[onstart]   instance device ID: $INSTANCE_DEV_ID"
+  echo "[onstart]   on your laptop, run: /pair-syncthing <this-instance-id>"
+else
+  echo "[onstart] SYNCTHING_PEER_DEVICE_ID unset — syncthing daemon is running as root but no auto-pair was performed."
+  echo "[onstart]   To enable: set -e SYNCTHING_PEER_DEVICE_ID=<your-laptop-device-id> on 'vastai create instance'."
+fi
 
 echo "[onstart] provisioning complete -- ComfyUI should be reachable on port 18188 shortly"
