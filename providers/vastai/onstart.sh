@@ -15,22 +15,26 @@
 #
 # Wiring on a VastAI instance (vastai create instance ...):
 #   --onstart-cmd '/opt/instance-tools/bin/entrypoint.sh'      <-- image normal boot
-#   --volume <VOLUME_ID>:/workspace/ComfyUI/models             <-- REQUIRED — persistent models
+#   --link-volume <VOLUME_ID>  --mount-path /workspace/ComfyUI/models   <-- OPTIONAL
 #   --env "-e PROVISIONING_SCRIPT=<url-to-this-file> \
 #          -e HF_TOKEN=hf_xxx \
 #          -e STACK_REPO=owner/your-stack \
-#          -e VOLUME_ID=<id-of-your-volume> \
+#          -e VOLUME_ID=<id-of-your-volume> \                  <-- OPTIONAL (paired with above)
 #          -e PORTAL_CONFIG=... \
 #          -e COMFYUI_ARGS=... \
 #          ..."
 #
-# The --volume flag is mandatory: this script aborts at preflight if
-# VOLUME_ID is unset OR /workspace/ComfyUI/models is not a mountpoint.
-# Rationale: prevents accidental re-download of large model files each
-# time you destroy + recreate an instance during a multi-workflow session.
-# Create the volume once with `vastai create volume --size 200` and reuse
-# it across every instance for that work session — models persist between
-# destroys; only ComfyUI core + custom_nodes are re-installed.
+# Volume is OPTIONAL. Setting VOLUME_ID + the --link-volume/--mount-path
+# pair enables persistent storage for models + workflows + settings across
+# instance destroys (the "single work-session, multi-stack" pattern).
+# Omitting VOLUME_ID falls back to instance-disk-only — every destroy
+# wipes models and you re-download next time.
+#
+# WHY OPTIONAL: VastAI's marketplace binds local volumes to a specific
+# machine_id. Finding a machine with both a rentable GPU offer AND a
+# co-located volume offer is often hard (only ~1 out of every 12+ active
+# RTX 4090 hosts has both). The framework's soft-fallback lets you use
+# any rentable GPU when co-location isn't available.
 #
 # See providers/vastai/template.json for the full env-var set and
 # providers/vastai/README.md for the full create command + rationale.
@@ -45,12 +49,16 @@
 # Required env (from --env at instance create):
 #   HF_TOKEN          HuggingFace token (gated models + workflow fallbacks)
 #   STACK_REPO        owner/repo containing provisioner-config.sh + comfyui/
-#   VOLUME_ID         VastAI network volume id (persistent storage for models)
-#                     — paired with `--volume $VOLUME_ID:/workspace/ComfyUI/models`
-#                     on the create-instance command.
 #
 # Required if STACK_REPO is private:
 #   GH_TOKEN          GitHub PAT with read access to STACK_REPO
+#
+# Optional but recommended:
+#   VOLUME_ID         VastAI volume id (enables persistent storage for models
+#                     + workflows + settings). Paired with `--link-volume
+#                     $VOLUME_ID --mount-path /workspace/ComfyUI/models` on
+#                     the create-instance command. See header for marketplace
+#                     co-location reality.
 #
 # Optional env:
 #   CIVITAI_API_KEY        Civitai token (LoRA downloads — Phase 5 warns if unset)
@@ -71,36 +79,43 @@ exec > >(tee -a /workspace/provision.log) 2>&1
 
 : "${HF_TOKEN:?HF_TOKEN must be set via --env}"
 : "${STACK_REPO:?STACK_REPO must be set via --env (format: owner/repo)}"
-: "${VOLUME_ID:?VOLUME_ID must be set via --env. Create a volume first:
-    vastai create volume --size 200 --geolocation NO    # 200 GB in Norway, for example
-  Then attach it on instance create:
-    --volume \$VOLUME_ID:/workspace/ComfyUI/models -e VOLUME_ID=\$VOLUME_ID
-  Persisting models on a volume avoids re-downloading them every boot.}"
 
-# Verify the volume actually got mounted at the expected path. If VOLUME_ID
-# was set in env but no --volume flag was passed on `vastai create instance`,
-# /workspace/ComfyUI/models will be a plain directory on instance disk and
-# our 75+ GB of models would land there only to be wiped on destroy.
-if ! mountpoint -q /workspace/ComfyUI/models 2>/dev/null; then
-  echo "[onstart] FATAL: VOLUME_ID=$VOLUME_ID is set but /workspace/ComfyUI/models is NOT a mountpoint." >&2
-  echo "[onstart]        Did you forget the --volume flag on 'vastai create instance'?" >&2
-  echo "[onstart]        Add: --volume \$VOLUME_ID:/workspace/ComfyUI/models" >&2
-  exit 1
-fi
-echo "[onstart] volume check OK: VOLUME_ID=$VOLUME_ID mounted at /workspace/ComfyUI/models"
-
-# Enable user-state persistence — by default the provisioner symlinks
-# workflows/ + comfy.settings.json into $MODELS/_user/ on the volume so
-# your Cmd+S edits and UI prefs survive instance destroy.
+# VOLUME_ID is OPTIONAL. The VastAI marketplace co-location reality:
+# volumes are bound to a specific machine_id, and finding a machine
+# with BOTH a rentable GPU AND a co-located volume offer is often
+# difficult (search both `vastai search offers` and `vastai search
+# volumes`, find a machine_id intersection before booking). When
+# co-location works, set VOLUME_ID + pass `--link-volume $VOLUME_ID
+# --mount-path /workspace/ComfyUI/models` and your models + user state
+# persist across destroys. When it doesn't, omit VOLUME_ID and accept
+# that you'll re-download models on next instance.
 #
-# ComfyUI/output and ComfyUI/input are intentionally NOT persisted by
-# default (PERSIST_OUTPUTS=0): for the "iterate on workflow → ship as
-# API" pattern, outputs are ephemeral test artifacts best left on
-# instance disk where they auto-wipe on destroy. Download the ones you
-# want to keep before destroying the instance. Set PERSIST_OUTPUTS=1
-# via --env on instance create if you need them to survive destroy.
-export PERSIST_USER_STATE="${PERSIST_USER_STATE:-1}"
-export PERSIST_OUTPUTS="${PERSIST_OUTPUTS:-0}"
+# Soft-fallback semantics:
+#   VOLUME_ID unset       -> no persistence; PERSIST_USER_STATE forced to 0
+#   VOLUME_ID set + mount -> persistence enabled; PERSIST_USER_STATE defaults to 1
+#   VOLUME_ID set, NO mnt -> FATAL (intent vs reality mismatch)
+if [ -n "${VOLUME_ID:-}" ]; then
+  if ! mountpoint -q /workspace/ComfyUI/models 2>/dev/null; then
+    echo "[onstart] FATAL: VOLUME_ID=$VOLUME_ID is set but /workspace/ComfyUI/models is NOT a mountpoint." >&2
+    echo "[onstart]        Did you forget --link-volume \$VOLUME_ID --mount-path /workspace/ComfyUI/models" >&2
+    echo "[onstart]        on 'vastai create instance'? Unset VOLUME_ID to proceed without persistence." >&2
+    exit 1
+  fi
+  echo "[onstart] volume check OK: VOLUME_ID=$VOLUME_ID mounted at /workspace/ComfyUI/models"
+  export PERSIST_USER_STATE="${PERSIST_USER_STATE:-1}"
+  export PERSIST_OUTPUTS="${PERSIST_OUTPUTS:-0}"
+else
+  echo "[onstart] VOLUME_ID unset — running without persistent storage."
+  echo "[onstart]   Models will live on instance disk and be wiped on destroy."
+  echo "[onstart]   Workflow edits + outputs likewise ephemeral."
+  echo "[onstart]   To enable persistence: (a) find a machine_id with both a"
+  echo "[onstart]   rentable GPU offer AND a co-located volume offer via:"
+  echo "[onstart]     vastai search offers ... && vastai search volumes ..."
+  echo "[onstart]   (b) create the volume; (c) re-launch with --link-volume +"
+  echo "[onstart]   --mount-path /workspace/ComfyUI/models + -e VOLUME_ID=<id>"
+  export PERSIST_USER_STATE=0
+  export PERSIST_OUTPUTS=0
+fi
 echo "[onstart] PERSIST_USER_STATE=$PERSIST_USER_STATE  PERSIST_OUTPUTS=$PERSIST_OUTPUTS"
 
 STACK_BRANCH="${STACK_BRANCH:-main}"
@@ -179,7 +194,7 @@ echo "[onstart] WORKFLOWS_SRC_DIR=$WORKFLOWS_SRC_DIR"
     printf "export PROVISIONER_DIR=%q\n"    "${PROVISIONER_DIR}"
     printf "export PROVISIONER_CONFIG=%q\n" "${PROVISIONER_CONFIG}"
     printf "export WORKFLOWS_SRC_DIR=%q\n"  "${WORKFLOWS_SRC_DIR}"
-    printf "export VOLUME_ID=%q\n"          "${VOLUME_ID}"
+    printf "export VOLUME_ID=%q\n"          "${VOLUME_ID:-}"
     printf "export PERSIST_USER_STATE=%q\n" "${PERSIST_USER_STATE}"
     printf "export PERSIST_OUTPUTS=%q\n"    "${PERSIST_OUTPUTS}"
   } > /workspace/.provisioner.env

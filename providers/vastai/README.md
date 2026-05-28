@@ -33,51 +33,77 @@ Your stack repo (whatever you set as `STACK_REPO`) must contain at its root:
 
 That's it. No submodule of `comfyui-provisioner` is needed in the stack repo for cloud use — `onstart.sh` pulls the framework directly.
 
-## Required: create a network volume first
+## Optional: persistent network volume (recommended when available)
 
-This framework **mandates** a persistent network volume mounted at `/workspace/ComfyUI/models`. The provisioner aborts at preflight if `VOLUME_ID` is unset or the mountpoint isn't a real volume.
+You can attach a VastAI volume at `/workspace/ComfyUI/models` to persist model downloads + workflow edits + UI settings across instance destroy/recreate. The provisioner soft-fails: when `VOLUME_ID` is set, persistence is wired up; when unset, the framework falls back to instance-disk-only (models re-download on every cold boot).
 
-**Why mandatory:** during a multi-workflow work session you'll destroy + recreate instances multiple times (to switch stacks, swap GPU tiers, retry on a different host). Without a volume, every recreate re-downloads 24–75 GB of models — 10+ minutes of wall-clock waste per cycle. A volume turns those downloads into a one-time cost amortised across every instance for the session.
+### The VastAI marketplace co-location reality
+
+Local volumes are bound to a specific `machine_id`. To use one, you need:
+1. A rentable GPU offer
+2. A co-located volume offer on the **same machine_id** (not just same host_id or country)
+
+In practice, only a small fraction of available GPU machines also offer volumes — often just 1 out of 12+ active RTX 4090 hosts at any moment. Use this helper to find a match:
 
 ```bash
-# One-time per work session — create a 200 GB volume in a region close to your offers.
-# Geolocation MUST match the instance's host country (volume + instance must be in same DC).
-vastai create volume --size 200 --geolocation NO    # 200 GB in Norway, ~$6/month
-# -> returns: {"success": true, "id": 12345, ...}
+# Pick a machine that has BOTH a GPU and a volume offer
+python3 <<'PY'
+import subprocess, json
+g = json.loads(subprocess.check_output(['vastai','search','offers',
+  'gpu_name in [RTX_4090,RTX_3090] verified=true rentable=true num_gpus=1 disk_space>=100',
+  '--limit','50','--raw']))
+v = json.loads(subprocess.check_output(['vastai','search','volumes',
+  'disk_space>=200 verified=true','--limit','100','--raw']))
+g_machs = {o['machine_id']:o for o in g}
+v_machs = {o['machine_id']:o for o in v}
+for mid in sorted(set(g_machs) & set(v_machs)):
+    gpu, vol = g_machs[mid], v_machs[mid]
+    print(f"mach={mid} {gpu.get('gpu_name')} ${gpu.get('dph_total',0):.2f}/hr "
+          f"+ vol_offer={vol['id']} ${vol.get('storage_cost',0)*200:.2f}/mo "
+          f"({gpu.get('geolocation','?')})")
+PY
+```
 
-# Note the returned id. Export it for use below.
-export VOLUME_ID=12345
+### Creating + using a volume
 
-# Inspect / list volumes you already have
+```bash
+# Pick a volume offer that's co-located with your chosen GPU offer (per above).
+# Names: alphanumeric + underscore only, max 64 chars.
+vastai create volume <volume-offer-id> --size 200 --name workday_test
+# -> returns: {"success": true, "volume_name": "V.38186467"}
+
+# Export the numeric id (after "V.")
+export VOLUME_ID=38186467
+
+# Inspect
 vastai show volumes
 ```
 
-The volume persists across instance destroys. Tear it down only when you're done with the work session:
+When your work session is done, delete the volume so it stops billing:
 
 ```bash
-vastai destroy volume $VOLUME_ID
+vastai delete volume $VOLUME_ID
 ```
+
+Costs vary by host — typical pricing is $0.13–$0.33/GB-month, so 200 GB ≈ $26–66/month while the volume exists.
 
 ## Renting a new instance
 
 ```bash
 # Search for an offer (RTX 4090 example, verified providers, cheapest first).
-# The geolocation filter MUST match the volume's region — instance + volume must be in same DC.
-vastai search offers 'gpu_name=RTX_4090 verified=true rentable=true disk_space>=100 geolocation=NO' \
+vastai search offers 'gpu_name=RTX_4090 verified=true rentable=true disk_space>=100' \
   --order dph_total --limit 5
 
-# Create instance — onstart-cmd invokes entrypoint.sh; PROVISIONING_SCRIPT is read inside.
-# IMPORTANT:
-#   - PORTAL_CONFIG + COMFYUI_ARGS must be set explicitly when creating via CLI
-#     (the vastai/comfy web-UI template includes them as defaults; CLI does not).
-#   - --volume is REQUIRED. Provisioner aborts if VOLUME_ID + mount aren't both set.
-#   - --disk only needs ~100 GB now (image + ComfyUI + custom_nodes); models live on the volume.
+# Create instance. The --link-volume + --mount-path + VOLUME_ID lines are
+# OPTIONAL — include them only when you have a co-located volume per the
+# section above. PORTAL_CONFIG + COMFYUI_ARGS must always be set explicitly
+# (the vastai/comfy web-UI template includes them as defaults; CLI does not).
 PORTAL='localhost:1111:11111:/:Instance Portal|localhost:8188:18188:/:ComfyUI|localhost:8288:18288:/docs:API Wrapper|localhost:8080:18080:/:Jupyter|localhost:8080:8080:/terminals/1:Jupyter Terminal|localhost:8384:18384:/:Syncthing'
 
 vastai create instance <offer-id> \
   --image vastai/comfy:v0.22.0-cuda-12.9-py312 \
   --disk 100 \
-  --volume $VOLUME_ID:/workspace/ComfyUI/models \
+  --link-volume $VOLUME_ID --mount-path /workspace/ComfyUI/models \
   --env "-p 1111:1111 -p 8080:8080 -p 8188:8188 -p 8288:8288 -p 8384:8384 -p 18188:18188 \
          -e PROVISIONING_SCRIPT=https://raw.githubusercontent.com/ismail-kattakath/comfyui-provisioner/main/providers/vastai/onstart.sh \
          -e HF_TOKEN=$HF_TOKEN \
@@ -91,6 +117,10 @@ vastai create instance <offer-id> \
          -e OPEN_BUTTON_TOKEN=1" \
   --onstart-cmd '/opt/instance-tools/bin/entrypoint.sh' \
   --ssh --direct
+
+# Without a volume: drop the --link-volume / --mount-path / -e VOLUME_ID
+# lines. The framework will run without persistence — models re-download
+# every cold boot.
 
 # Get the new instance's SSH URL (use the direct IP, not the proxied ssh8.vast.ai address)
 vastai ssh-url <new-instance-id>
@@ -168,8 +198,8 @@ The vastai/comfy image's normal boot now drives everything:
 |---|---|---|
 | `HF_TOKEN` | yes | HuggingFace model downloads (gated + Bearer auth) |
 | `STACK_REPO` | yes | `owner/repo` containing `provisioner-config.sh` + `comfyui/` |
-| `VOLUME_ID` | yes | VastAI network volume id. Paired with `--volume $VOLUME_ID:/workspace/ComfyUI/models`. Provisioner aborts if unset or if mountpoint check fails. |
 | `GH_TOKEN` | if STACK_REPO is private | GitHub PAT with `repo` read scope |
+| `VOLUME_ID` | recommended (when available) | VastAI volume id. Paired with `--link-volume $VOLUME_ID --mount-path /workspace/ComfyUI/models`. When set, persistence is enabled; when unset, framework runs without persistence. If set but mount missing, provisioner FATALs (intent mismatch). |
 | `CIVITAI_API_KEY` | recommended | Civitai LoRA downloads. Phase 5 warns if unset. |
 
 ## Optional env vars

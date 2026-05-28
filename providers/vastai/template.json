@@ -1,16 +1,11 @@
 {
-  "_comment": "VastAI instance template for ComfyUI provisioning. The onstart_cmd invokes the image's normal boot pipeline (entrypoint.sh → boot_default.sh → /etc/vast_boot.d/*), which handles workspace sync, supervisord launch, then runs PROVISIONING_SCRIPT as Phase 9 of its declarative provisioner, then removes /.provisioning so services start. A persistent network volume is REQUIRED — see _volume_setup below. Replace the REPLACE_ME values before use.",
-  "_volume_setup": "BEFORE first use, create a persistent network volume ONCE per work session: `vastai create volume --size 200 --geolocation NO` (200 GB in Norway, ~$6/month). Note the volume id and set it as VOLUME_ID env + --volume flag below. Reusing the same volume across instances during the same work day avoids re-downloading 75+ GB of models on every boot. Destroy the volume only when you're done for the day: `vastai destroy volume <id>`.",
+  "_comment": "VastAI instance template for ComfyUI provisioning. The onstart_cmd invokes the image's normal boot pipeline (entrypoint.sh → boot_default.sh → /etc/vast_boot.d/*), which handles workspace sync, supervisord launch, then runs PROVISIONING_SCRIPT as Phase 9 of its declarative provisioner, then removes /.provisioning so services start. Replace the REPLACE_ME values before use.",
+  "_volume_setup_optional": "If you want models + workflow edits + UI settings to persist across instance destroy/recreate, find a machine_id that has BOTH a rentable GPU AND a co-located volume offer (run the helper from README's 'Optional persistent volume' section), create the volume via `vastai create volume <offer-id> --size 200 --name workday_test`, then set VOLUME_ID below and include the link-volume + mount-path keys on instance create. Without a volume the framework runs fine but models redownload on every cold boot.",
   "image": "vastai/comfy:v0.22.0-cuda-12.9-py312",
   "disk": 100,
   "onstart_cmd": "/opt/instance-tools/bin/entrypoint.sh",
-  "volume_mounts": [
-    {
-      "_comment": "REQUIRED. Without this, models land on instance disk and are wiped on destroy. The framework's onstart.sh aborts at preflight if /workspace/ComfyUI/models is not a mountpoint.",
-      "volume_id": "REPLACE_ME_volume_id",
-      "mount_path": "/workspace/ComfyUI/models"
-    }
-  ],
+  "link_volume": "REPLACE_ME_volume_id_or_omit",
+  "mount_path": "/workspace/ComfyUI/models",
   "env": {
     "PROVISIONING_SCRIPT": "https://raw.githubusercontent.com/ismail-kattakath/comfyui-provisioner/main/providers/vastai/onstart.sh",
     "HF_TOKEN": "REPLACE_ME",
@@ -18,12 +13,12 @@
     "GH_TOKEN": "REPLACE_ME_if_STACK_REPO_is_private",
     "STACK_REPO": "owner/your-stack-repo",
     "STACK_BRANCH": "main",
-    "VOLUME_ID": "REPLACE_ME_volume_id",
+    "VOLUME_ID": "REPLACE_ME_volume_id_or_omit",
     "PORTAL_CONFIG": "localhost:1111:11111:/:Instance Portal|localhost:8188:18188:/:ComfyUI|localhost:8288:18288:/docs:API Wrapper|localhost:8080:18080:/:Jupyter|localhost:8080:8080:/terminals/1:Jupyter Terminal|localhost:8384:18384:/:Syncthing",
     "COMFYUI_ARGS": "--disable-auto-launch --port 18188 --enable-cors-header --enable-manager",
     "COMFYUI_API_BASE": "http://localhost:18188",
     "OPEN_BUTTON_PORT": "1111",
     "OPEN_BUTTON_TOKEN": "1"
   },
-  "_usage": "# Step 1 (one-time per work session): create a volume\nvastai create volume --size 200 --geolocation NO\n# -> note the returned volume id, e.g. 12345\n\n# Step 2: launch the instance with the volume attached\nvastai create instance <offer-id> --image vastai/comfy:v0.22.0-cuda-12.9-py312 --disk 100 --volume <volume-id>:/workspace/ComfyUI/models --env \"-p 1111:1111 -p 8080:8080 -p 8188:8188 -p 8288:8288 -p 8384:8384 -p 18188:18188 -e PROVISIONING_SCRIPT=https://raw.githubusercontent.com/ismail-kattakath/comfyui-provisioner/main/providers/vastai/onstart.sh -e HF_TOKEN=hf_... -e STACK_REPO=owner/your-stack -e VOLUME_ID=<volume-id> -e PORTAL_CONFIG='localhost:1111:11111:/:Instance Portal|localhost:8188:18188:/:ComfyUI|localhost:8288:18288:/docs:API Wrapper|localhost:8080:18080:/:Jupyter|localhost:8080:8080:/terminals/1:Jupyter Terminal|localhost:8384:18384:/:Syncthing' -e COMFYUI_ARGS='--disable-auto-launch --port 18188 --enable-cors-header --enable-manager' -e OPEN_BUTTON_PORT=1111 -e OPEN_BUTTON_TOKEN=1\" --onstart-cmd '/opt/instance-tools/bin/entrypoint.sh' --ssh --direct"
+  "_usage": "# Optional: create a volume if a co-located offer is available (see README)\nvastai create volume <volume-offer-id> --size 200 --name workday_test\n# -> note returned numeric id\n\n# Launch the instance.\n# WITH volume:    --link-volume <id> --mount-path /workspace/ComfyUI/models  + -e VOLUME_ID=<id>\n# WITHOUT volume: omit the --link-volume / --mount-path / -e VOLUME_ID lines\nvastai create instance <offer-id> --image vastai/comfy:v0.22.0-cuda-12.9-py312 --disk 100 --link-volume <volume-id> --mount-path /workspace/ComfyUI/models --env \"-p 1111:1111 -p 8080:8080 -p 8188:8188 -p 8288:8288 -p 8384:8384 -p 18188:18188 -e PROVISIONING_SCRIPT=https://raw.githubusercontent.com/ismail-kattakath/comfyui-provisioner/main/providers/vastai/onstart.sh -e HF_TOKEN=hf_... -e STACK_REPO=owner/your-stack -e VOLUME_ID=<volume-id> -e PORTAL_CONFIG='localhost:1111:11111:/:Instance Portal|localhost:8188:18188:/:ComfyUI|localhost:8288:18288:/docs:API Wrapper|localhost:8080:18080:/:Jupyter|localhost:8080:8080:/terminals/1:Jupyter Terminal|localhost:8384:18384:/:Syncthing' -e COMFYUI_ARGS='--disable-auto-launch --port 18188 --enable-cors-header --enable-manager' -e OPEN_BUTTON_PORT=1111 -e OPEN_BUTTON_TOKEN=1\" --onstart-cmd '/opt/instance-tools/bin/entrypoint.sh' --ssh --direct"
 }
