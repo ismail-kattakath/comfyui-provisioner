@@ -6,7 +6,7 @@ Provisions ComfyUI on a fresh VastAI rental in ~12-15 minutes.
 
 A registered VastAI template wraps the entire CLI launch into a clickable URL:
 
-- **Template page** (description + readme): https://cloud.vast.ai/template/readme/901e57e8eda5ac1af68bd580cdca885f
+- **Template page** (description + readme): https://cloud.vast.ai/template/readme/3eb23421f2ae1318446138ca487ca9cd
 - **Rent page** (skip straight to offer selection): https://cloud.vast.ai/?template_id=438945&template_hash=901e57e8eda5ac1af68bd580cdca885f
 
 What you fill in before clicking Rent:
