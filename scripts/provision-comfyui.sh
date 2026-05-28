@@ -520,12 +520,18 @@ if [ "${SKIP_WORKFLOW:-0}" != "1" ]; then
   # --- Settings hardening: ensure framework defaults are set in
   #     comfy.settings.json without clobbering any user-chosen value.
   #     Keys we enforce ONLY when missing:
-  #       Comfy.UseNewMenu = "Disabled"
-  #         → restores the legacy floating menu (where ComfyUI-Manager's
-  #           original button lives). Without this, ComfyUI defaults to
-  #           "Top" and the Manager button is harder to find.
-  #     If the user later sets the value to "Top"/"Bottom" via the UI and
-  #     saves, that choice is preserved (we only fill in missing keys). ---
+  #       Comfy.UseNewMenu = "Top"
+  #         → keeps the modern top menu bar visible. This IS ComfyUI's
+  #           default; we set it explicitly so the framework's intent is
+  #           recorded in the file even if upstream defaults change.
+  #           Manager's UI lives in the top menu bar as the puzzle-piece
+  #           button — NOT as a floating button in a legacy menu.
+  #           Earlier the framework set this to "Disabled" thinking that
+  #           would make Manager more discoverable, but that just hid the
+  #           entire top bar with no clean Manager replacement.
+  #     If the user later sets the value to "Bottom" or "Disabled" via
+  #     the UI and saves, that choice is preserved (we only fill in
+  #     missing keys). ---
   if [ ! -f "$SETTINGS_DEST" ]; then
     # No seed exists yet — start from an empty JSON object so jq can merge into it
     echo '{}' > "$SETTINGS_DEST"
@@ -558,7 +564,7 @@ else:
 PY
     fi
   }
-  ensure_setting "Comfy.UseNewMenu" "Disabled"
+  ensure_setting "Comfy.UseNewMenu" "Top"
 else
   banner "Phase 4 — Workflow JSON [SKIPPED]"
 fi
