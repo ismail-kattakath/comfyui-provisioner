@@ -114,6 +114,12 @@ Local project MCPs always override `MCP_DOCKER` equivalents. Never use `Bash(cur
 | **Agent Team** | Workers need to share findings, debate hypotheses, or coordinate on their own |
 | **Skill** | Reusable prompt/workflow that runs in the main conversation context (no isolation) |
 
+### Delegation default
+
+> **Delegation default.** Any task whose discovery phase requires more than 2 read-only investigations (Read, Grep, Bash with read-only commands like `jq`/`grep`/`wc`/`find`/`ls`/`git log`, or any `mcp__*` read tool) MUST dispatch a background `Explore` (or `general-purpose`) subagent for that phase. The Lead consumes only the subagent's summary, never the raw output. "Judgment call" and "small task" are not exceptions — the threshold is the rule.
+
+Enforced by `.claude/hooks/enforce-delegation.sh` (PreToolUse). Counter resets on any `Agent` dispatch in the session.
+
 Subagents cannot spawn other subagents. Nested delegation must be chained from the main conversation (Lead) directly.
 
 ### Dispatching background subagents
