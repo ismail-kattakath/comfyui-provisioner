@@ -100,6 +100,20 @@ cp "$WORKFLOWS_LIVE/$NAME" "$WORKFLOWS_REPO/$NAME"
 
 cd "$STACK_DIR"
 
+# Pre-flight: refuse to proceed on top of an unfinished rebase from a
+# previous run. Auto-cleanup is risky (could discard intentional manual
+# work), so we surface the situation explicitly and let the user decide.
+if [ -d "$STACK_DIR/.git/rebase-merge" ] || [ -d "$STACK_DIR/.git/rebase-apply" ]; then
+  echo "[save] WARNING: a previous rebase is unfinished in $STACK_DIR" >&2
+  echo "[save] Resolve before continuing:" >&2
+  echo "[save]   cd $STACK_DIR && git status   # see what's in progress" >&2
+  echo "[save]   git rebase --continue          # if you've fixed conflicts" >&2
+  echo "[save]   git rebase --abort             # to discard the half-done rebase" >&2
+  echo "[save] If you're sure nothing's salvageable:" >&2
+  echo "[save]   rm -rf $STACK_DIR/.git/rebase-merge $STACK_DIR/.git/rebase-apply" >&2
+  exit 1
+fi
+
 # Persist git identity into THIS repo's config (not just for one command).
 # Required because `git pull --rebase` later in this script reads from
 # config, not from `-c` overrides — without persisted identity, rebase
