@@ -1,0 +1,38 @@
+{
+  "_comment": "RunPod pod template definition for comfyui-provisioner. Use this as a reference for the runpodctl create pod command or the RunPod web UI. See providers/runpod/README.md for the full walkthrough.",
+  "_usage": "runpodctl create pod --name comfyui-mystack --imageName yanwk/comfyui-boot:cu124-slim --containerDiskInGb 100 --volumeInGb 0 --volumeMountPath /workspace --ports '8188/http,22/tcp' --gpuType 'NVIDIA GeForce RTX 4090' --gpuCount 1 --minMemoryInGb 24 --env 'PUBLIC_KEY=<SSH_PUBLIC_KEY>' --env 'HF_TOKEN=<REPLACE_ME>' --env 'STACK_REPO=owner/your-stack' --env 'GH_TOKEN=<REPLACE_ME>' --containerStartCommand 'bash -c \"curl -fsSL https://raw.githubusercontent.com/ismail-kattakath/comfyui-provisioner/main/providers/runpod/onstart.sh | bash\"'",
+  "image": "yanwk/comfyui-boot:cu124-slim",
+  "containerDiskInGb": 100,
+  "volumeInGb": 0,
+  "volumeMountPath": "/workspace",
+  "ports": "8188/http,22/tcp",
+  "containerStartCommand": "bash -c \"curl -fsSL https://raw.githubusercontent.com/ismail-kattakath/comfyui-provisioner/main/providers/runpod/onstart.sh | bash\"",
+  "env": {
+    "PUBLIC_KEY": "REPLACE_ME — your SSH public key (contents of ~/.ssh/id_ed25519.pub)",
+    "HF_TOKEN": "REPLACE_ME — HuggingFace token (hf_...)",
+    "STACK_REPO": "REPLACE_ME — owner/repo of your stack (e.g. owner/comfyui-stack-example)",
+    "STACK_BRANCH": "main",
+    "GH_TOKEN": "REPLACE_ME_OR_OMIT — GitHub PAT with repo read scope (required for private stacks)",
+    "CIVITAI_API_KEY": "REPLACE_ME_OR_OMIT — Civitai API key (required if stack downloads Civitai LoRAs)",
+    "SYNCTHING_PEER_DEVICE_ID": "REPLACE_ME_OR_OMIT — your laptop's Syncthing device ID for workflow auto-pair",
+    "SYNCTHING_PEER_NAME": "local-peer",
+    "SYNCTHING_FOLDER_ID": "comfyui-workflows",
+    "SYNCTHING_FOLDER_LABEL": "ComfyUI Workflows",
+    "PROVISIONER_REPO": "ismail-kattakath/comfyui-provisioner",
+    "PROVISIONER_BRANCH": "main"
+  },
+  "gpu": {
+    "type": "NVIDIA GeForce RTX 4090",
+    "count": 1,
+    "minMemoryInGb": 24
+  },
+  "notes": [
+    "ComfyUI is accessible at https://<pod-id>-8188.proxy.runpod.net once provisioning completes (~12-20 min on first boot).",
+    "SSH: ssh root@<PUBLIC_IP> -p <RUNPOD_TCP_PORT_22>  (find port with: runpodctl get pod <id>)",
+    "Logs: /workspace/provision.log (full run) and /workspace/comfyui.log (ComfyUI process).",
+    "Reprovision from SSH: bash /workspace/reprovision.sh",
+    "The yanwk/comfyui-boot:cu124-slim image installs ComfyUI at /root/ComfyUI. The provisioner's COMFYUI_DIR auto-detection covers this path via the ~/comfyui candidate.",
+    "Volumes: RunPod network volumes mount at /workspace. Pass --networkVolumeId <id> to runpodctl for persistence.",
+    "Cloudflare limitation: the RunPod HTTP proxy has a 100-second timeout on proxied ports. Long-running inference jobs that exceed 100s will appear to hang in the browser. Use the direct TCP port (22) for SSH or poll the API from a client that isn't behind Cloudflare."
+  ]
+}
