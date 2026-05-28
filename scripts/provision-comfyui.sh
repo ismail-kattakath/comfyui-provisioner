@@ -516,6 +516,49 @@ if [ "${SKIP_WORKFLOW:-0}" != "1" ]; then
   elif [ -f "$SETTINGS_DEST" ]; then
     log "[ok] $SETTINGS_DEST already present — left as-is (FORCE_RESTAGE=1 to override)"
   fi
+
+  # --- Settings hardening: ensure framework defaults are set in
+  #     comfy.settings.json without clobbering any user-chosen value.
+  #     Keys we enforce ONLY when missing:
+  #       Comfy.UseNewMenu = "Disabled"
+  #         → restores the legacy floating menu (where ComfyUI-Manager's
+  #           original button lives). Without this, ComfyUI defaults to
+  #           "Top" and the Manager button is harder to find.
+  #     If the user later sets the value to "Top"/"Bottom" via the UI and
+  #     saves, that choice is preserved (we only fill in missing keys). ---
+  if [ ! -f "$SETTINGS_DEST" ]; then
+    # No seed exists yet — start from an empty JSON object so jq can merge into it
+    echo '{}' > "$SETTINGS_DEST"
+    log "[ok] created empty $SETTINGS_DEST for settings hardening"
+  fi
+  ensure_setting() {
+    local key="$1" val="$2"
+    local current
+    if command -v jq >/dev/null 2>&1; then
+      current="$(jq -r --arg k "$key" '.[$k] // "_unset"' "$SETTINGS_DEST" 2>/dev/null)"
+      if [ "$current" = "_unset" ]; then
+        local tmp; tmp="$(mktemp)"
+        jq --arg k "$key" --arg v "$val" '. + {($k): $v}' "$SETTINGS_DEST" > "$tmp" && mv "$tmp" "$SETTINGS_DEST"
+        log "[settings] added missing $key = \"$val\""
+      else
+        log "[settings] $key already set to \"$current\" — preserved"
+      fi
+    else
+      # Fallback: python3 (available on every image we target)
+      python3 - "$SETTINGS_DEST" "$key" "$val" <<'PY'
+import json, sys
+path, key, val = sys.argv[1:]
+d = json.load(open(path))
+if key not in d:
+    d[key] = val
+    json.dump(d, open(path, 'w'), indent=2)
+    print(f'[settings] added missing {key} = "{val}"')
+else:
+    print(f'[settings] {key} already set to "{d[key]}" — preserved')
+PY
+    fi
+  }
+  ensure_setting "Comfy.UseNewMenu" "Disabled"
 else
   banner "Phase 4 — Workflow JSON [SKIPPED]"
 fi
