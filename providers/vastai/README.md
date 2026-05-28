@@ -272,41 +272,6 @@ New interactive SSH shells auto-load `/workspace/.provisioner.env` via the appen
 
 > ⚠️ `/workspace/.provisioner.env` stores the HuggingFace, Civitai, and GitHub tokens in clear text. It's `chmod 600` (root-readable only). Don't `cat` it into a screenshot, paste it into a chat, or copy it off the instance.
 
-## Pushing edited workflows back to the stack repo
-
-ComfyUI's Cmd+S writes to `user/default/workflows/<name>.json` on the instance — that's your **working copy**. It does NOT auto-push to the stack repo on GitHub. This is by design: production AI APIs want intentional version control, not commit-spam from every save.
-
-When a workflow is good enough to keep, run the bundled helper:
-
-```bash
-ssh -i ~/.ssh/id_ed25519 -p <port> root@<ip>
-
-# Interactive — lists workflows + prompts which to push
-bash /workspace/save-workflow.sh
-
-# Explicit — push named workflow to main
-bash /workspace/save-workflow.sh 10Eros_10SNodes_LikenessGuideHelper_I2V_v3.2.json
-
-# Push to a feature branch instead (creates branch if needed)
-bash /workspace/save-workflow.sh 10Eros_10SNodes_LikenessGuideHelper_I2V_v3.2.json iteration/v4
-
-# Just list what's available
-bash /workspace/save-workflow.sh --list
-```
-
-The helper:
-1. Reads `STACK_DIR` + `GH_TOKEN` from `/workspace/.provisioner.env`
-2. Copies the live workflow file into the cloned stack repo's `comfyui/` dir
-3. Creates/checks out the target branch if needed
-4. Commits with `"Update <workflow> from ComfyUI on <hostname>"`
-5. Pushes to `origin/<branch>` using the GH_TOKEN-authed clone
-6. Prints the GitHub commit URL
-
-Exit behaviors:
-- No diff vs current branch → no commit, exits 0 (no-op)
-- Push rejected by remote (upstream changed) → instructions to run `git pull --rebase` printed, exits 1
-- Missing stack file at expected path → exits 1 with location of what went wrong
-
 ## Tearing down (save fees)
 
 ```bash
