@@ -8,6 +8,7 @@
 .claude/projects/
 .claude/worktrees/
 .claude/*.lock
+.claude/state/
 
 # IDE / dev caches
 .mypy_cache/
