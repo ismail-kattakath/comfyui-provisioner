@@ -100,9 +100,16 @@ cp "$WORKFLOWS_LIVE/$NAME" "$WORKFLOWS_REPO/$NAME"
 
 cd "$STACK_DIR"
 
-# Set git identity for this commit (env override allowed)
-GIT_USER_NAME="${GIT_USER_NAME:-${USER:-comfyui}}"
+# Persist git identity into THIS repo's config (not just for one command).
+# Required because `git pull --rebase` later in this script reads from
+# config, not from `-c` overrides — without persisted identity, rebase
+# fails with "Committer identity unknown" if the repo's email/name
+# aren't set. Env vars take priority for explicit override; otherwise
+# we derive a sane default from $USER@$(hostname).
+GIT_USER_NAME="${GIT_USER_NAME:-${USER:-comfyui-on-vastai}}"
 GIT_USER_EMAIL="${GIT_USER_EMAIL:-${USER:-comfyui}@$(hostname)}"
+git config user.name  "$GIT_USER_NAME"
+git config user.email "$GIT_USER_EMAIL"
 
 # Ensure we have the requested branch checked out
 CUR_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo main)
@@ -116,6 +123,42 @@ if [ "$BRANCH" != "$CUR_BRANCH" ]; then
   fi
 fi
 
+# Fetch + rebase BEFORE committing. The stack repo's `main` often has
+# new commits (CI workflow tweaks, README updates) since the instance
+# was provisioned — without this rebase, the push at the end would be
+# rejected as non-fast-forward and the user would be stuck untangling
+# a detached-HEAD recovery. Doing rebase first keeps the happy path
+# simple: local clone is current, then we add our commit on top.
+#
+# Skip when AUTO_REBASE=0 — some users may prefer manual control of
+# this step if their setup uses long-lived feature branches.
+if [ "${AUTO_REBASE:-1}" = "1" ]; then
+  echo "[save] fetching + rebasing on origin/$BRANCH (set AUTO_REBASE=0 to skip)..."
+  if ! git fetch origin "$BRANCH" 2>&1 | sed 's/^/[save] /'; then
+    echo "[save] fetch failed — proceeding without rebase"
+  else
+    # Only rebase if origin/$BRANCH exists (it would on first push to a new branch otherwise)
+    if git rev-parse --verify "origin/$BRANCH" >/dev/null 2>&1; then
+      if ! git rebase "origin/$BRANCH" 2>&1 | sed 's/^/[save] /'; then
+        echo
+        echo "[save] REBASE FAILED with conflicts."
+        echo "[save] Resolve manually:"
+        echo "[save]   cd $STACK_DIR"
+        echo "[save]   # edit conflicted files, then:"
+        echo "[save]   git add <files>; git rebase --continue"
+        echo "[save]   git push origin $BRANCH"
+        echo "[save] Or abort the rebase + try again:"
+        echo "[save]   git rebase --abort"
+        exit 1
+      fi
+    fi
+  fi
+fi
+
+# Re-copy the live workflow after rebase (rebase may have changed the
+# tree; we want our edits to land on top of the now-current upstream).
+cp "$WORKFLOWS_LIVE/$NAME" "$WORKFLOWS_REPO/$NAME"
+
 # Stage + bail if nothing changed
 git add "comfyui/$NAME"
 if git diff --cached --quiet; then
@@ -127,16 +170,17 @@ fi
 SHORT_NAME="${NAME%.json}"
 HOST=$(hostname)
 MSG="Update $SHORT_NAME workflow from ComfyUI on $HOST"
-git -c "user.email=$GIT_USER_EMAIL" -c "user.name=$GIT_USER_NAME" \
-    commit -m "$MSG" | sed 's/^/[save] /'
+git commit -m "$MSG" | sed 's/^/[save] /'
 
 # Push
 echo "[save] pushing to origin/$BRANCH..."
 if ! git push origin "$BRANCH" 2>&1 | sed 's/^/[save] /'; then
   echo
-  echo "[save] PUSH FAILED. Likely cause: upstream changed since last fetch."
-  echo "[save] Try resolving with:"
-  echo "[save]   cd $STACK_DIR && git pull --rebase && git push origin $BRANCH"
+  echo "[save] PUSH FAILED after rebase. This is unusual — either someone"
+  echo "[save] pushed to $BRANCH between our fetch and push, OR the remote"
+  echo "[save] rejected for another reason (branch protection, hooks, etc)."
+  echo "[save] Re-run this script; if it persists, investigate manually:"
+  echo "[save]   cd $STACK_DIR && git status && git log origin/$BRANCH..HEAD"
   exit 1
 fi
 
