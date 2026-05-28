@@ -18,6 +18,7 @@ What you fill in before clicking Rent:
 | `STACK_REPO` | yes | `owner/repo` of your stack (default = `ismail-kattakath/comfyui-stack-qwen-image-edit-aio`) |
 | `CIVITAI_API_KEY` | optional | Required only if your stack has Civitai LoRAs |
 | `VOLUME_ID` | optional | Set the id + add `--link-volume <id> --mount-path /workspace/ComfyUI/models` in the volume section. See "Optional: persistent network volume" below. |
+| `SYNCTHING_PEER_DEVICE_ID` | optional | Your laptop's Syncthing device ID. When set, the instance auto-pairs and shares the workflows folder for live sync to your Mac. See "Workflow sync via Syncthing" below. |
 
 The template bakes in all the fiddly bits (port mappings, `PORTAL_CONFIG`, `COMFYUI_ARGS`, `OPEN_BUTTON_PORT`, `onstart_cmd`, image tag), so the CLI errors I used to make with quoting are designed out.
 
@@ -233,6 +234,10 @@ The vastai/comfy image's normal boot now drives everything:
 | `PROVISIONER_BRANCH` | `main` | Framework branch |
 | `PROVISIONER_DIR` | `/workspace/comfyui-provisioner` | Where to clone the framework |
 | `SKIP_*` | `0` | Skip provisioner phases (see main README) |
+| `SYNCTHING_PEER_DEVICE_ID` | unset (skip auto-pair) | Operator's Syncthing device ID. When set, `onstart.sh` adds your laptop as a paired peer and shares the workflows folder. See "Workflow sync via Syncthing" below. |
+| `SYNCTHING_PEER_NAME` | `local-peer` | Friendly name for the paired device, shown in the Syncthing GUI |
+| `SYNCTHING_FOLDER_ID` | `comfyui-workflows` | Folder ID — must match the operator's local folder ID |
+| `SYNCTHING_FOLDER_LABEL` | `ComfyUI Workflows` | Display label for the shared folder |
 
 ## Watching progress
 
@@ -271,6 +276,73 @@ SKIP_SYSTEM=1 SKIP_NODES=1 bash $PROVISIONER_DIR/scripts/provision-comfyui.sh
 New interactive SSH shells auto-load `/workspace/.provisioner.env` via the appended line in `/root/.bashrc`, so the env vars are available without any explicit `source` step after the first login.
 
 > ⚠️ `/workspace/.provisioner.env` stores the HuggingFace, Civitai, and GitHub tokens in clear text. It's `chmod 600` (root-readable only). Don't `cat` it into a screenshot, paste it into a chat, or copy it off the instance.
+
+## Workflow sync via Syncthing
+
+The framework mirrors `/workspace/ComfyUI/user/default/workflows/` on the instance to a local folder on your laptop using Syncthing (already shipped on the vastai/comfy image's Caddy app set). Edit a workflow in the ComfyUI browser UI on the instance, hit Cmd+S, the JSON appears locally within ~10 seconds, then commit from the local stack repo when satisfied.
+
+This replaces the deprecated `/workspace/save-workflow.sh` git-push helper that earlier versions of this provider shipped.
+
+### One-time setup on your laptop
+
+Install Syncthing on macOS — both the formula (CLI on PATH) and the cask (menu-bar GUI + Login Items autostart):
+
+```bash
+brew install syncthing
+brew install --cask syncthing-app
+brew services start syncthing
+```
+
+Grab your stable Mac device ID (same across all instances):
+
+```bash
+syncthing cli show system status | jq -r .myID
+```
+
+Add it to your local `.env` (or pass via `--env` on `vastai create instance`):
+
+```bash
+SYNCTHING_PEER_DEVICE_ID=<your-mac-device-id>
+```
+
+### What `onstart.sh` does for you per instance
+
+When `SYNCTHING_PEER_DEVICE_ID` is set:
+
+1. Switches the syncthing supervisor entry from `user=user` to `user=root`. The vastai/comfy image runs syncthing as `user`, but ComfyUI writes workflow JSON files as `root` with mode 0600 — the daemon can't read them without this change. (Single-tenant container, no security concern.)
+2. Pre-adds your Mac device ID and creates a sendonly folder share for the workflows directory.
+3. Logs the new instance's Syncthing device ID to `/workspace/provision.log`.
+
+All steps are idempotent. Re-running `bash /workspace/reprovision.sh` is safe.
+
+### Per new instance: one slash command on your Mac
+
+```
+/pair-syncthing <instance-id>
+```
+
+This Claude Code command (defined at `.claude/commands/pair-syncthing.md`) SSHs into the instance, reads its Syncthing device ID + folder config, then adds them to local Syncthing as a receiveonly folder share pointing at the stack repo's local `comfyui/` directory. Waits for connection and records the pair in memory.
+
+### Daily flow
+
+1. Edit workflows in ComfyUI on the instance → Cmd+S
+2. Within ~10s the file appears at `~/aloshy-ai/<stack-repo-name>/comfyui/`
+3. `cd ~/aloshy-ai/<stack-repo-name> && git status && git commit -am "..." && git push`
+
+### .gitignore in the stack repo
+
+Add these so Syncthing artifacts don't dirty git:
+
+```
+.stfolder
+.stversions/
+.stignore
+.sync-conflict-*
+```
+
+### Folder type choice
+
+The instance is configured **Send Only** and the Mac side **Receive Only** by default. This makes the instance the master so a stray local `git checkout` can never propagate back and clobber in-progress ComfyUI work. To edit workflows locally, you'd need to flip the local folder to Send & Receive — but in practice all editing happens in ComfyUI on the instance, so this default is the safe one.
 
 ## Tearing down (save fees)
 
