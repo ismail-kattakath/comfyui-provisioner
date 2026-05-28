@@ -95,9 +95,6 @@ echo "[save] stack:     $STACK_REPO"
 echo "[save] branch:    $BRANCH"
 echo
 
-# Copy live → repo
-cp "$WORKFLOWS_LIVE/$NAME" "$WORKFLOWS_REPO/$NAME"
-
 cd "$STACK_DIR"
 
 # Pre-flight: refuse to proceed on top of an unfinished rebase from a
