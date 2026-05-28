@@ -163,6 +163,33 @@ export WORKFLOWS_SRC_DIR="$STACK_DIR/comfyui"
 echo "[onstart] PROVISIONER_CONFIG=$PROVISIONER_CONFIG"
 echo "[onstart] WORKFLOWS_SRC_DIR=$WORKFLOWS_SRC_DIR"
 
+# 4b. Mirror HF_TOKEN to non-standard env-var aliases that some ComfyUI
+#     custom_nodes read directly (instead of using huggingface_hub's
+#     standard HF_TOKEN). Patches the comfyui program's supervisord
+#     config so ComfyUI inherits the alias when supervisord forks it.
+#
+#     Known consumers:
+#       HUGGINGFACE_TOKEN — huchukato/ComfyUI-HuggingFace (model browser)
+#
+#     Why not just /etc/environment: supervisord caches its env at start
+#     time and forks children with that cached env. Writing to
+#     /etc/environment after supervisord booted is a no-op for ComfyUI.
+#     Editing the per-program 'environment=' line + supervisorctl
+#     reread/update/restart is the reliable path.
+COMFYUI_SUPERVISORD_CONF="/etc/supervisor/conf.d/comfyui.conf"
+if [ -f "$COMFYUI_SUPERVISORD_CONF" ] && ! grep -qE 'HUGGINGFACE_TOKEN=' "$COMFYUI_SUPERVISORD_CONF"; then
+  # Extend the existing environment= line with HUGGINGFACE_TOKEN=<HF_TOKEN value>.
+  # %q-style quoting via printf so embedded shell-special chars round-trip safely.
+  HF_TOKEN_ESC="$(printf '%s' "$HF_TOKEN" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g')"
+  sed -i "s|^environment=PROC_NAME=\"%(program_name)s\"|environment=PROC_NAME=\"%(program_name)s\",HUGGINGFACE_TOKEN=\"$HF_TOKEN_ESC\"|" "$COMFYUI_SUPERVISORD_CONF"
+  echo "[onstart] patched $COMFYUI_SUPERVISORD_CONF with HUGGINGFACE_TOKEN env alias"
+  supervisorctl reread 2>&1 | sed 's/^/[onstart] /'
+  supervisorctl update comfyui 2>&1 | sed 's/^/[onstart] /'
+  # NOTE: comfyui will restart on its own via 'update'. We don't
+  # explicitly restart here — the boot pipeline's services-restart block
+  # later handles it as part of the standard onstart epilogue.
+fi
+
 # 5. Persist tokens + config to /workspace/.provisioner.env so the operator
 #    can re-run the provisioner from an interactive SSH session. VastAI
 #    doesn't export the boot env to SSH shells, so without this file a
@@ -184,6 +211,9 @@ echo "[onstart] WORKFLOWS_SRC_DIR=$WORKFLOWS_SRC_DIR"
     printf "#   bash %s/scripts/provision-comfyui.sh\n" "$PROVISIONER_DIR"
     printf "# Or use the wrapper: bash /workspace/reprovision.sh\n"
     printf "export HF_TOKEN=%q\n"           "${HF_TOKEN}"
+    # Alias for huchukato/ComfyUI-HuggingFace which reads HUGGINGFACE_TOKEN
+    # rather than the canonical HF_TOKEN. Same value, different name.
+    printf "export HUGGINGFACE_TOKEN=%q\n"  "${HF_TOKEN}"
     printf "export CIVITAI_API_KEY=%q\n"    "${CIVITAI_API_KEY:-}"
     printf "export GH_TOKEN=%q\n"           "${GH_TOKEN:-}"
     printf "export STACK_REPO=%q\n"         "${STACK_REPO}"
