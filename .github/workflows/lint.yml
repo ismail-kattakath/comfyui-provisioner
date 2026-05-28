@@ -1,0 +1,42 @@
+name: lint
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  bash-syntax:
+    runs-on: ubuntu-latest
+    name: bash -n + shellcheck (errors-only) + JSON validation
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: bash -n on provisioner + all provider scripts
+        run: |
+          set -e
+          bash -n scripts/provision-comfyui.sh && echo "OK scripts/provision-comfyui.sh"
+          for f in providers/*/onstart.sh providers/*/launch.sh scripts/*.sh; do
+            [ -f "$f" ] || continue
+            bash -n "$f" && echo "OK $f"
+          done
+
+      - name: shellcheck (errors only — warnings are informational)
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck
+          # -S error: only fail on errors; warnings/info shown but not blocking
+          shellcheck -S error scripts/*.sh providers/*/*.sh || {
+            echo "::error::shellcheck found errors above"
+            exit 1
+          }
+          echo "OK shellcheck (errors-only)"
+          # Also run informational pass for visibility — does not fail build
+          echo
+          echo "::group::shellcheck informational pass (warnings + info, non-blocking)"
+          shellcheck -S info scripts/*.sh providers/*/*.sh || true
+          echo "::endgroup::"
+
+      - name: validate VastAI template JSON
+        run: |
+          jq empty providers/vastai/template.json && echo "OK providers/vastai/template.json"
