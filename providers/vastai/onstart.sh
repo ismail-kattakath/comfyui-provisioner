@@ -283,6 +283,14 @@ WRAPPER_EOF
 chmod +x /workspace/reprovision.sh
 echo "[onstart] wrote /workspace/reprovision.sh (re-run with: bash /workspace/reprovision.sh)"
 
+# Drop the save-workflow helper so the operator can intentionally commit +
+# push edited workflows from this instance back to the stack repo with a
+# single command. Standard PR-style flow, not auto-on-Cmd+S.
+if [ -f "$PROVISIONER_DIR/scripts/save-workflow.sh" ]; then
+  install -m 755 "$PROVISIONER_DIR/scripts/save-workflow.sh" /workspace/save-workflow.sh
+  echo "[onstart] wrote /workspace/save-workflow.sh (push edited workflow to stack repo: bash /workspace/save-workflow.sh [name.json] [branch])"
+fi
+
 bash "$PROVISIONER_DIR/scripts/provision-comfyui.sh"
 
 # --- Portal regeneration (per Vast docs PROVISIONING_SCRIPT example) -----
