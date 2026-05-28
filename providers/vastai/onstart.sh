@@ -166,10 +166,13 @@ echo "[onstart] WORKFLOWS_SRC_DIR=$WORKFLOWS_SRC_DIR"
 # 4b. Mirror HF_TOKEN to non-standard env-var aliases that some ComfyUI
 #     custom_nodes read directly (instead of using huggingface_hub's
 #     standard HF_TOKEN). Patches the comfyui program's supervisord
-#     config so ComfyUI inherits the alias when supervisord forks it.
+#     config so ComfyUI inherits the aliases when supervisord forks it.
 #
-#     Known consumers:
-#       HUGGINGFACE_TOKEN — huchukato/ComfyUI-HuggingFace (model browser)
+#     Known consumers + their idiosyncratic env-var names:
+#       HUGGINGFACE_TOKEN   — huchukato/ComfyUI-HuggingFace (source code)
+#       HUGGINGFACE_API_KEY — huchukato/ComfyUI-HuggingFace (README claims)
+#     The source and the README disagree on which name to use; setting
+#     both is cheap and covers either reading path.
 #
 #     Why not just /etc/environment: supervisord caches its env at start
 #     time and forks children with that cached env. Writing to
@@ -177,17 +180,27 @@ echo "[onstart] WORKFLOWS_SRC_DIR=$WORKFLOWS_SRC_DIR"
 #     Editing the per-program 'environment=' line + supervisorctl
 #     reread/update/restart is the reliable path.
 COMFYUI_SUPERVISORD_CONF="/etc/supervisor/conf.d/comfyui.conf"
-if [ -f "$COMFYUI_SUPERVISORD_CONF" ] && ! grep -qE 'HUGGINGFACE_TOKEN=' "$COMFYUI_SUPERVISORD_CONF"; then
-  # Extend the existing environment= line with HUGGINGFACE_TOKEN=<HF_TOKEN value>.
-  # %q-style quoting via printf so embedded shell-special chars round-trip safely.
+if [ -f "$COMFYUI_SUPERVISORD_CONF" ]; then
+  # %q-style quoting via sed so embedded shell-special chars round-trip safely.
   HF_TOKEN_ESC="$(printf '%s' "$HF_TOKEN" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g')"
-  sed -i "s|^environment=PROC_NAME=\"%(program_name)s\"|environment=PROC_NAME=\"%(program_name)s\",HUGGINGFACE_TOKEN=\"$HF_TOKEN_ESC\"|" "$COMFYUI_SUPERVISORD_CONF"
-  echo "[onstart] patched $COMFYUI_SUPERVISORD_CONF with HUGGINGFACE_TOKEN env alias"
-  supervisorctl reread 2>&1 | sed 's/^/[onstart] /'
-  supervisorctl update comfyui 2>&1 | sed 's/^/[onstart] /'
-  # NOTE: comfyui will restart on its own via 'update'. We don't
-  # explicitly restart here — the boot pipeline's services-restart block
-  # later handles it as part of the standard onstart epilogue.
+  PATCHED=0
+  if ! grep -q 'HUGGINGFACE_TOKEN=' "$COMFYUI_SUPERVISORD_CONF"; then
+    sed -i "s|^environment=PROC_NAME=\"%(program_name)s\"|environment=PROC_NAME=\"%(program_name)s\",HUGGINGFACE_TOKEN=\"$HF_TOKEN_ESC\"|" "$COMFYUI_SUPERVISORD_CONF"
+    PATCHED=1
+  fi
+  if ! grep -q 'HUGGINGFACE_API_KEY=' "$COMFYUI_SUPERVISORD_CONF"; then
+    # Append after HUGGINGFACE_TOKEN= (which we just ensured exists)
+    sed -i "s|HUGGINGFACE_TOKEN=\"$HF_TOKEN_ESC\"|HUGGINGFACE_TOKEN=\"$HF_TOKEN_ESC\",HUGGINGFACE_API_KEY=\"$HF_TOKEN_ESC\"|" "$COMFYUI_SUPERVISORD_CONF"
+    PATCHED=1
+  fi
+  if [ "$PATCHED" = "1" ]; then
+    echo "[onstart] patched $COMFYUI_SUPERVISORD_CONF with HF token aliases (HUGGINGFACE_TOKEN + HUGGINGFACE_API_KEY)"
+    supervisorctl reread 2>&1 | sed 's/^/[onstart] /'
+    supervisorctl update comfyui 2>&1 | sed 's/^/[onstart] /'
+    # NOTE: comfyui will restart on its own via 'update'. We don't
+    # explicitly restart here — the boot pipeline's services-restart block
+    # later handles it as part of the standard onstart epilogue.
+  fi
 fi
 
 # 5. Persist tokens + config to /workspace/.provisioner.env so the operator
@@ -210,11 +223,14 @@ fi
     printf "#   source /workspace/.provisioner.env\n"
     printf "#   bash %s/scripts/provision-comfyui.sh\n" "$PROVISIONER_DIR"
     printf "# Or use the wrapper: bash /workspace/reprovision.sh\n"
-    printf "export HF_TOKEN=%q\n"           "${HF_TOKEN}"
-    # Alias for huchukato/ComfyUI-HuggingFace which reads HUGGINGFACE_TOKEN
-    # rather than the canonical HF_TOKEN. Same value, different name.
-    printf "export HUGGINGFACE_TOKEN=%q\n"  "${HF_TOKEN}"
-    printf "export CIVITAI_API_KEY=%q\n"    "${CIVITAI_API_KEY:-}"
+    printf "export HF_TOKEN=%q\n"             "${HF_TOKEN}"
+    # Aliases for huchukato/ComfyUI-HuggingFace which reads non-standard
+    # HUGGINGFACE_TOKEN in its source (server/utils.py) and
+    # HUGGINGFACE_API_KEY in its README — set both so either reading
+    # path works. All point at the same value as HF_TOKEN.
+    printf "export HUGGINGFACE_TOKEN=%q\n"    "${HF_TOKEN}"
+    printf "export HUGGINGFACE_API_KEY=%q\n"  "${HF_TOKEN}"
+    printf "export CIVITAI_API_KEY=%q\n"      "${CIVITAI_API_KEY:-}"
     printf "export GH_TOKEN=%q\n"           "${GH_TOKEN:-}"
     printf "export STACK_REPO=%q\n"         "${STACK_REPO}"
     printf "export STACK_BRANCH=%q\n"       "${STACK_BRANCH}"
