@@ -106,20 +106,44 @@ So when a stack's Phase 5 sees its models already present on the volume (from a 
 
 ### User-state persistence (Cmd+S edits, outputs, inputs)
 
-Without further config, the volume only persists `models/`. Workflow edits you save via Cmd+S, generated outputs, and uploaded reference images would live on **instance disk** and be wiped on destroy.
+Two independent env flags control what gets symlinked from instance disk onto the volume.
 
-To prevent that, this provider sets `PERSIST_USER_STATE=1` by default. The provisioner then redirects four user-modified paths to the volume:
+| Flag | Default in this provider | What it persists |
+|---|---|---|
+| `PERSIST_USER_STATE` | **1** | `user/default/workflows/` + `user/default/comfy.settings.json` — your Cmd+S edits and UI prefs |
+| `PERSIST_OUTPUTS` | **0** | `ComfyUI/output/` + `ComfyUI/input/` — generated images/videos + uploaded references |
 
-| Path on instance disk | Symlinks to |
-|---|---|
-| `/workspace/ComfyUI/user/default/workflows/` | `$MODELS/_user/workflows/` |
-| `/workspace/ComfyUI/user/default/comfy.settings.json` | `$MODELS/_user/comfy.settings.json` |
-| `/workspace/ComfyUI/output/` | `$MODELS/_user/output/` |
-| `/workspace/ComfyUI/input/` | `$MODELS/_user/input/` |
+Defaults are tuned for the "iterate on workflow → ship as API" pattern: workflows and settings persist across instance destroys (centrally maintained on the volume), but outputs and inputs are treated as ephemeral test artifacts that auto-wipe on destroy. Download the outputs you want to keep before destroying the instance.
 
-Result: your Cmd+S edits, generated images/videos, and uploaded inputs survive instance destroy as long as the volume lives.
+When both flags are 1, the volume layout is:
 
-**Phase 4 behavior change:** on every re-provision, if a workflow JSON is already present at the target (i.e. on the volume from a previous boot), Phase 4 logs `[skip] <name>.json — preserving user edits` instead of overwriting. Same for `comfy.settings.json`. To force re-stage the pristine version from the stack repo, set `FORCE_RESTAGE=1`:
+```
+$MODELS/_user/                      (volume-backed)
+  ├── workflows/                    ← user/default/workflows symlink target
+  ├── comfy.settings.json           ← user/default/comfy.settings.json symlink target
+  ├── output/                       ← ComfyUI/output symlink target  (PERSIST_OUTPUTS=1 only)
+  └── input/                        ← ComfyUI/input symlink target   (PERSIST_OUTPUTS=1 only)
+```
+
+#### Why outputs aren't persisted by default
+
+Generated videos can be hundreds of MB each. Over a few iteration cycles on a workflow, that's tens of GB of test artifacts you probably don't care about. Leaving outputs on instance disk:
+- Auto-wipes on `vastai destroy instance` — no disk-pressure cleanup needed
+- Keeps the volume focused on the things you _do_ want centrally maintained (workflows + settings + models)
+- Lower volume cost — a 100 GB volume is enough for most stacks' models
+
+If you want outputs persisted (e.g., you generate something and want it available on the next instance), set `PERSIST_OUTPUTS=1` on instance create via `--env`.
+
+#### Note on instance-disk fill-up
+
+`ComfyUI/output/` and `/tmp` both live on the container's overlay filesystem (instance disk). Linux does NOT auto-clear `/tmp` on disk pressure — disk-full just causes `ENOSPC` on new writes. For long-lived instances generating lots of outputs, either:
+1. Download outputs locally and clear them yourself (`rm /workspace/ComfyUI/output/*.png`)
+2. Destroy and recreate the instance (cheapest cleanup)
+3. Set `PERSIST_OUTPUTS=1` and let outputs spill to the volume instead
+
+#### Phase 4 behavior change
+
+On every re-provision, if a workflow JSON is already present at the target (i.e. on the volume from a previous boot), Phase 4 logs `[skip] <name>.json — preserving user edits` instead of overwriting. Same for `comfy.settings.json`. To force re-stage the pristine version from the stack repo, set `FORCE_RESTAGE=1`:
 
 ```bash
 ssh -i ~/.ssh/id_ed25519 -p <port> root@<ip>
@@ -127,9 +151,9 @@ source /workspace/.provisioner.env
 FORCE_RESTAGE=1 bash $PROVISIONER_DIR/scripts/provision-comfyui.sh
 ```
 
-**Workflows accumulate across stacks** — if you deploy stack A, save edits, then later deploy stack B on the same volume, you'll see both stacks' workflows in the ComfyUI sidebar. ComfyUI lists every `.json` in `workflows/`; pick whichever you want.
+#### Workflows accumulate across stacks
 
-**Output disk usage** can grow. Generated videos can be hundreds of MB each. The 200 GB volume gives you ~114 GB after models — plenty for moderate use. Bump volume size at creation time (`--size 500`) for heavier output retention.
+If you deploy stack A, save edits, then later deploy stack B on the same volume, you'll see both stacks' workflows in the ComfyUI sidebar. ComfyUI lists every `.json` in `workflows/`; pick whichever you want. This is a feature for multi-workflow work sessions.
 
 The vastai/comfy image's normal boot now drives everything:
 1. `/etc/vast_boot.d/36-sync-workspace.sh` copies ComfyUI into `/workspace/ComfyUI`

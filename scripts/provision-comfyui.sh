@@ -154,34 +154,47 @@ mkdir -p \
 # entries reference them — e.g. "loras/my-subdir/foo.safetensors" works
 # even though loras/my-subdir/ isn't pre-created here.
 
-# ---------- User-state persistence on volume (opt-in) ----------
-# When PERSIST_USER_STATE=1, redirect the four user-modified paths
-# (workflows, settings, output, input) onto the same volume that holds
-# models. The volume's contents survive instance destroy, so your Cmd+S
-# saves, generated outputs, and uploaded reference images persist across
-# every boot of any stack on the same volume.
+# ---------- User-state persistence on volume (opt-in, two flags) ----------
+# Two independent flags:
+#   PERSIST_USER_STATE=1  — symlinks workflows + comfy.settings.json to the
+#                            volume so your Cmd+S edits and UI prefs survive
+#                            instance destroy. Default 0 (opt-in by provider).
+#   PERSIST_OUTPUTS=1     — ALSO symlinks ComfyUI/output and ComfyUI/input
+#                            to the volume. Default 0. Off by default because
+#                            for the "iterate on workflow → ship as API"
+#                            pattern, outputs are ephemeral test artifacts
+#                            best left on instance disk (auto-wiped on
+#                            destroy). Set to 1 only if you need
+#                            generated images/videos to survive destroy
+#                            without downloading them off the instance.
 #
 # Layout under $MODELS/_user/:
 #   workflows/                       <- user/default/workflows symlink target
 #   comfy.settings.json              <- user/default/comfy.settings.json symlink target
-#   output/                          <- ComfyUI/output symlink target
-#   input/                           <- ComfyUI/input symlink target
+#   output/                          <- ComfyUI/output symlink target  (only if PERSIST_OUTPUTS=1)
+#   input/                           <- ComfyUI/input symlink target   (only if PERSIST_OUTPUTS=1)
 #
 # Idempotent: if the symlink already points to the right target, no-op.
 # Safe: rescues any pre-existing content under the canonical paths by
 # moving it into the volume before replacing with a symlink.
 if [ "${PERSIST_USER_STATE:-0}" = "1" ]; then
-  banner "User-state persistence — symlinking into volume at $MODELS/_user/"
+  banner "User-state persistence — symlinking into volume at $MODELS/_user/ (PERSIST_OUTPUTS=${PERSIST_OUTPUTS:-0})"
   USER_STATE_ROOT="$MODELS/_user"
-  mkdir -p "$USER_STATE_ROOT"/{workflows,output,input}
+  mkdir -p "$USER_STATE_ROOT/workflows"
 
-  # path-on-disk -> path-on-volume pairs (4 entries, dir or file)
+  # path-on-disk -> path-on-volume pairs. Workflows + settings always
+  # persisted; output + input gated on PERSIST_OUTPUTS=1.
   declare -a PERSIST_PAIRS=(
     "$COMFYUI_DIR/user/default/workflows|$USER_STATE_ROOT/workflows"
     "$COMFYUI_DIR/user/default/comfy.settings.json|$USER_STATE_ROOT/comfy.settings.json"
-    "$COMFYUI_DIR/output|$USER_STATE_ROOT/output"
-    "$COMFYUI_DIR/input|$USER_STATE_ROOT/input"
   )
+  if [ "${PERSIST_OUTPUTS:-0}" = "1" ]; then
+    mkdir -p "$USER_STATE_ROOT"/{output,input}
+    PERSIST_PAIRS+=(
+      "$COMFYUI_DIR/output|$USER_STATE_ROOT/output"
+      "$COMFYUI_DIR/input|$USER_STATE_ROOT/input"
+    )
+  fi
   for pair in "${PERSIST_PAIRS[@]}"; do
     IFS="|" read -r src dst <<<"$pair"
     mkdir -p "$(dirname "$src")"

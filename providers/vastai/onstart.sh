@@ -89,13 +89,19 @@ if ! mountpoint -q /workspace/ComfyUI/models 2>/dev/null; then
 fi
 echo "[onstart] volume check OK: VOLUME_ID=$VOLUME_ID mounted at /workspace/ComfyUI/models"
 
-# Enable user-state persistence — the provisioner symlinks the four
-# user-modified paths (workflows/, comfy.settings.json, output/, input/)
-# into $MODELS/_user/ on the volume, so they survive instance destroy.
-# Disable by setting PERSIST_USER_STATE=0 explicitly via --env (not
-# recommended — your Cmd+S edits and generated outputs would be lost).
+# Enable user-state persistence — by default the provisioner symlinks
+# workflows/ + comfy.settings.json into $MODELS/_user/ on the volume so
+# your Cmd+S edits and UI prefs survive instance destroy.
+#
+# ComfyUI/output and ComfyUI/input are intentionally NOT persisted by
+# default (PERSIST_OUTPUTS=0): for the "iterate on workflow → ship as
+# API" pattern, outputs are ephemeral test artifacts best left on
+# instance disk where they auto-wipe on destroy. Download the ones you
+# want to keep before destroying the instance. Set PERSIST_OUTPUTS=1
+# via --env on instance create if you need them to survive destroy.
 export PERSIST_USER_STATE="${PERSIST_USER_STATE:-1}"
-echo "[onstart] PERSIST_USER_STATE=$PERSIST_USER_STATE"
+export PERSIST_OUTPUTS="${PERSIST_OUTPUTS:-0}"
+echo "[onstart] PERSIST_USER_STATE=$PERSIST_USER_STATE  PERSIST_OUTPUTS=$PERSIST_OUTPUTS"
 
 STACK_BRANCH="${STACK_BRANCH:-main}"
 STACK_DIR="${STACK_DIR:-/workspace/$(basename "$STACK_REPO")}"
@@ -175,6 +181,7 @@ echo "[onstart] WORKFLOWS_SRC_DIR=$WORKFLOWS_SRC_DIR"
     printf "export WORKFLOWS_SRC_DIR=%q\n"  "${WORKFLOWS_SRC_DIR}"
     printf "export VOLUME_ID=%q\n"          "${VOLUME_ID}"
     printf "export PERSIST_USER_STATE=%q\n" "${PERSIST_USER_STATE}"
+    printf "export PERSIST_OUTPUTS=%q\n"    "${PERSIST_OUTPUTS}"
   } > /workspace/.provisioner.env
 )
 chmod 600 /workspace/.provisioner.env
