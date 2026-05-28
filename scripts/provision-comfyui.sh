@@ -154,6 +154,70 @@ mkdir -p \
 # entries reference them — e.g. "loras/my-subdir/foo.safetensors" works
 # even though loras/my-subdir/ isn't pre-created here.
 
+# ---------- User-state persistence on volume (opt-in) ----------
+# When PERSIST_USER_STATE=1, redirect the four user-modified paths
+# (workflows, settings, output, input) onto the same volume that holds
+# models. The volume's contents survive instance destroy, so your Cmd+S
+# saves, generated outputs, and uploaded reference images persist across
+# every boot of any stack on the same volume.
+#
+# Layout under $MODELS/_user/:
+#   workflows/                       <- user/default/workflows symlink target
+#   comfy.settings.json              <- user/default/comfy.settings.json symlink target
+#   output/                          <- ComfyUI/output symlink target
+#   input/                           <- ComfyUI/input symlink target
+#
+# Idempotent: if the symlink already points to the right target, no-op.
+# Safe: rescues any pre-existing content under the canonical paths by
+# moving it into the volume before replacing with a symlink.
+if [ "${PERSIST_USER_STATE:-0}" = "1" ]; then
+  banner "User-state persistence — symlinking into volume at $MODELS/_user/"
+  USER_STATE_ROOT="$MODELS/_user"
+  mkdir -p "$USER_STATE_ROOT"/{workflows,output,input}
+
+  # path-on-disk -> path-on-volume pairs (4 entries, dir or file)
+  declare -a PERSIST_PAIRS=(
+    "$COMFYUI_DIR/user/default/workflows|$USER_STATE_ROOT/workflows"
+    "$COMFYUI_DIR/user/default/comfy.settings.json|$USER_STATE_ROOT/comfy.settings.json"
+    "$COMFYUI_DIR/output|$USER_STATE_ROOT/output"
+    "$COMFYUI_DIR/input|$USER_STATE_ROOT/input"
+  )
+  for pair in "${PERSIST_PAIRS[@]}"; do
+    IFS="|" read -r src dst <<<"$pair"
+    mkdir -p "$(dirname "$src")"
+    if [ -L "$src" ]; then
+      # Already a symlink — verify it points to our target, fix if not
+      cur="$(readlink "$src")"
+      if [ "$cur" = "$dst" ]; then
+        log "[symlink] $src already points to $dst"
+        continue
+      fi
+      log "[symlink] $src points to $cur (wrong) — repointing to $dst"
+      rm -f "$src"
+    elif [ -e "$src" ]; then
+      # Real file/dir exists — rescue contents into the volume first
+      if [ -d "$src" ] && [ -d "$dst" ]; then
+        # Move any not-yet-on-volume files from src into dst (preserve newer)
+        log "[rescue] copying $src/* into $dst/ (preserving newer on volume)"
+        if command -v rsync >/dev/null 2>&1; then
+          rsync -a --ignore-existing "$src/" "$dst/" || warn "rsync failed for $src"
+        else
+          cp -rn "$src"/. "$dst/" 2>/dev/null || true
+        fi
+        rm -rf "$src"
+      elif [ -f "$src" ] && [ ! -f "$dst" ]; then
+        log "[rescue] moving $src to $dst"
+        mv "$src" "$dst"
+      else
+        log "[skip] $src already has content but $dst also exists — keeping volume copy"
+        rm -rf "$src"
+      fi
+    fi
+    ln -s "$dst" "$src"
+    log "[symlink] $src -> $dst"
+  done
+fi
+
 # Portable filesize helper
 filesize() {
   local f="$1"
@@ -404,6 +468,15 @@ if [ "${SKIP_WORKFLOW:-0}" != "1" ]; then
       IFS="|" read -r fname fallback_url <<<"$entry"
       target="$WORKFLOWS/$fname"
       src="$WORKFLOWS_SRC_DIR/$fname"
+      # Preserve user edits across re-provisions: skip if the target already
+      # exists, unless FORCE_RESTAGE=1 is set explicitly. This matters when
+      # $WORKFLOWS is symlinked to a persistent volume (PERSIST_USER_STATE=1)
+      # — without this guard, every re-provision would clobber the user's
+      # saved edits with the pristine workflow from the stack repo.
+      if [ -f "$target" ] && [ "${FORCE_RESTAGE:-0}" != "1" ]; then
+        log "[skip] $fname already present at $target — preserving user edits (FORCE_RESTAGE=1 to override)"
+        continue
+      fi
       if [ -f "$src" ]; then
         cp -f "$src" "$target"
         log "[ok] staged $fname (from $WORKFLOWS_SRC_DIR)"
@@ -418,16 +491,17 @@ if [ "${SKIP_WORKFLOW:-0}" != "1" ]; then
   fi
 
   # --- ComfyUI UI preferences (panel layout, queue sidebar, theme, etc.).
-  #     Only seeds the file on fresh install — never overwrite a user-modified
-  #     copy. Set SETTINGS_SRC in your config to point elsewhere if needed. ---
+  #     Only seeds the file on fresh install — never overwrites user edits
+  #     unless FORCE_RESTAGE=1 is set. Set SETTINGS_SRC in your config to
+  #     point elsewhere if needed. ---
   SETTINGS_FILE="${SETTINGS_FILE:-comfy.settings.json}"
   SETTINGS_SRC="${SETTINGS_SRC:-$WORKFLOWS_SRC_DIR/$SETTINGS_FILE}"
   SETTINGS_DEST="$COMFYUI_DIR/user/default/$SETTINGS_FILE"
-  if [ -f "$SETTINGS_SRC" ] && [ ! -f "$SETTINGS_DEST" ]; then
+  if [ -f "$SETTINGS_SRC" ] && { [ ! -f "$SETTINGS_DEST" ] || [ "${FORCE_RESTAGE:-0}" = "1" ]; }; then
     cp "$SETTINGS_SRC" "$SETTINGS_DEST"
     log "[ok] seeded $SETTINGS_DEST from $SETTINGS_SRC"
   elif [ -f "$SETTINGS_DEST" ]; then
-    log "[ok] $SETTINGS_DEST already present — left as-is"
+    log "[ok] $SETTINGS_DEST already present — left as-is (FORCE_RESTAGE=1 to override)"
   fi
 else
   banner "Phase 4 — Workflow JSON [SKIPPED]"

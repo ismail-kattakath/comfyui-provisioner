@@ -104,6 +104,33 @@ The framework's Phase 5 already short-circuits on existing models:
 
 So when a stack's Phase 5 sees its models already present on the volume (from a previous instance), every entry resolves to `[ok] <path> (<size> bytes)` in milliseconds instead of re-downloading. First-time downloads go to the volume; subsequent boots see them and skip.
 
+### User-state persistence (Cmd+S edits, outputs, inputs)
+
+Without further config, the volume only persists `models/`. Workflow edits you save via Cmd+S, generated outputs, and uploaded reference images would live on **instance disk** and be wiped on destroy.
+
+To prevent that, this provider sets `PERSIST_USER_STATE=1` by default. The provisioner then redirects four user-modified paths to the volume:
+
+| Path on instance disk | Symlinks to |
+|---|---|
+| `/workspace/ComfyUI/user/default/workflows/` | `$MODELS/_user/workflows/` |
+| `/workspace/ComfyUI/user/default/comfy.settings.json` | `$MODELS/_user/comfy.settings.json` |
+| `/workspace/ComfyUI/output/` | `$MODELS/_user/output/` |
+| `/workspace/ComfyUI/input/` | `$MODELS/_user/input/` |
+
+Result: your Cmd+S edits, generated images/videos, and uploaded inputs survive instance destroy as long as the volume lives.
+
+**Phase 4 behavior change:** on every re-provision, if a workflow JSON is already present at the target (i.e. on the volume from a previous boot), Phase 4 logs `[skip] <name>.json — preserving user edits` instead of overwriting. Same for `comfy.settings.json`. To force re-stage the pristine version from the stack repo, set `FORCE_RESTAGE=1`:
+
+```bash
+ssh -i ~/.ssh/id_ed25519 -p <port> root@<ip>
+source /workspace/.provisioner.env
+FORCE_RESTAGE=1 bash $PROVISIONER_DIR/scripts/provision-comfyui.sh
+```
+
+**Workflows accumulate across stacks** — if you deploy stack A, save edits, then later deploy stack B on the same volume, you'll see both stacks' workflows in the ComfyUI sidebar. ComfyUI lists every `.json` in `workflows/`; pick whichever you want.
+
+**Output disk usage** can grow. Generated videos can be hundreds of MB each. The 200 GB volume gives you ~114 GB after models — plenty for moderate use. Bump volume size at creation time (`--size 500`) for heavier output retention.
+
 The vastai/comfy image's normal boot now drives everything:
 1. `/etc/vast_boot.d/36-sync-workspace.sh` copies ComfyUI into `/workspace/ComfyUI`
 2. `/etc/vast_boot.d/65-supervisor-launch.sh` starts supervisord and touches `/.provisioning`

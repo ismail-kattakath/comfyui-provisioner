@@ -89,6 +89,14 @@ if ! mountpoint -q /workspace/ComfyUI/models 2>/dev/null; then
 fi
 echo "[onstart] volume check OK: VOLUME_ID=$VOLUME_ID mounted at /workspace/ComfyUI/models"
 
+# Enable user-state persistence — the provisioner symlinks the four
+# user-modified paths (workflows/, comfy.settings.json, output/, input/)
+# into $MODELS/_user/ on the volume, so they survive instance destroy.
+# Disable by setting PERSIST_USER_STATE=0 explicitly via --env (not
+# recommended — your Cmd+S edits and generated outputs would be lost).
+export PERSIST_USER_STATE="${PERSIST_USER_STATE:-1}"
+echo "[onstart] PERSIST_USER_STATE=$PERSIST_USER_STATE"
+
 STACK_BRANCH="${STACK_BRANCH:-main}"
 STACK_DIR="${STACK_DIR:-/workspace/$(basename "$STACK_REPO")}"
 PROVISIONER_REPO="${PROVISIONER_REPO:-ismail-kattakath/comfyui-provisioner}"
@@ -165,6 +173,8 @@ echo "[onstart] WORKFLOWS_SRC_DIR=$WORKFLOWS_SRC_DIR"
     printf "export PROVISIONER_DIR=%q\n"    "${PROVISIONER_DIR}"
     printf "export PROVISIONER_CONFIG=%q\n" "${PROVISIONER_CONFIG}"
     printf "export WORKFLOWS_SRC_DIR=%q\n"  "${WORKFLOWS_SRC_DIR}"
+    printf "export VOLUME_ID=%q\n"          "${VOLUME_ID}"
+    printf "export PERSIST_USER_STATE=%q\n" "${PERSIST_USER_STATE}"
   } > /workspace/.provisioner.env
 )
 chmod 600 /workspace/.provisioner.env
