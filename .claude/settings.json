@@ -127,6 +127,39 @@
         ]
       }
     ],
+    "SubagentStart": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "printf '{\"systemMessage\":\"Subagent starting. If this agent is deploying or verifying a VastAI instance, note its instance ID and task in Memory (mcp__memory__add_observations) to enable cross-session continuity.\"}'"
+          }
+        ]
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "input=$(cat); tool=$(printf '%s' \"$input\" | python3 -c \"import json,sys; d=json.load(sys.stdin); print(d.get('tool_name','unknown'))\" 2>/dev/null || echo unknown); printf '{\"systemMessage\":\"Tool failure: %s. Diagnose root cause before retrying. Do NOT retry in a loop. Persistent VastAI or SSH failures must be surfaced to the user.\"}' \"$tool\""
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "prompt",
+            "prompt": "Context is about to be compacted. Before compaction, save to Memory MCP (mcp__memory__create_entities / mcp__memory__add_observations): (1) current VastAI instance IDs and their deployment status, (2) stack deployment decisions made this session, (3) any failed offer IDs to avoid on retry. Entity type: 'session-state'. Skip if nothing new was learned this session."
+          }
+        ]
+      }
+    ],
     "TeammateIdle": [
       {
         "matcher": "*",
