@@ -33,27 +33,58 @@ Your stack repo (whatever you set as `STACK_REPO`) must contain at its root:
 
 That's it. No submodule of `comfyui-provisioner` is needed in the stack repo for cloud use — `onstart.sh` pulls the framework directly.
 
+## Required: create a network volume first
+
+This framework **mandates** a persistent network volume mounted at `/workspace/ComfyUI/models`. The provisioner aborts at preflight if `VOLUME_ID` is unset or the mountpoint isn't a real volume.
+
+**Why mandatory:** during a multi-workflow work session you'll destroy + recreate instances multiple times (to switch stacks, swap GPU tiers, retry on a different host). Without a volume, every recreate re-downloads 24–75 GB of models — 10+ minutes of wall-clock waste per cycle. A volume turns those downloads into a one-time cost amortised across every instance for the session.
+
+```bash
+# One-time per work session — create a 200 GB volume in a region close to your offers.
+# Geolocation MUST match the instance's host country (volume + instance must be in same DC).
+vastai create volume --size 200 --geolocation NO    # 200 GB in Norway, ~$6/month
+# -> returns: {"success": true, "id": 12345, ...}
+
+# Note the returned id. Export it for use below.
+export VOLUME_ID=12345
+
+# Inspect / list volumes you already have
+vastai show volumes
+```
+
+The volume persists across instance destroys. Tear it down only when you're done with the work session:
+
+```bash
+vastai destroy volume $VOLUME_ID
+```
+
 ## Renting a new instance
 
 ```bash
-# Search for an offer (RTX 4090 example, verified providers, cheapest first)
-vastai search offers 'gpu_name=RTX_4090 verified=true rentable=true disk_space>=200' \
+# Search for an offer (RTX 4090 example, verified providers, cheapest first).
+# The geolocation filter MUST match the volume's region — instance + volume must be in same DC.
+vastai search offers 'gpu_name=RTX_4090 verified=true rentable=true disk_space>=100 geolocation=NO' \
   --order dph_total --limit 5
 
 # Create instance — onstart-cmd invokes entrypoint.sh; PROVISIONING_SCRIPT is read inside.
-# IMPORTANT: PORTAL_CONFIG + COMFYUI_ARGS must be set explicitly when creating via CLI
-# (the vastai/comfy web-UI template includes them as defaults; CLI does not).
+# IMPORTANT:
+#   - PORTAL_CONFIG + COMFYUI_ARGS must be set explicitly when creating via CLI
+#     (the vastai/comfy web-UI template includes them as defaults; CLI does not).
+#   - --volume is REQUIRED. Provisioner aborts if VOLUME_ID + mount aren't both set.
+#   - --disk only needs ~100 GB now (image + ComfyUI + custom_nodes); models live on the volume.
 PORTAL='localhost:1111:11111:/:Instance Portal|localhost:8188:18188:/:ComfyUI|localhost:8288:18288:/docs:API Wrapper|localhost:8080:18080:/:Jupyter|localhost:8080:8080:/terminals/1:Jupyter Terminal|localhost:8384:18384:/:Syncthing'
 
 vastai create instance <offer-id> \
   --image vastai/comfy:v0.22.0-cuda-12.9-py312 \
-  --disk 200 \
+  --disk 100 \
+  --volume $VOLUME_ID:/workspace/ComfyUI/models \
   --env "-p 1111:1111 -p 8080:8080 -p 8188:8188 -p 8288:8288 -p 8384:8384 -p 18188:18188 \
          -e PROVISIONING_SCRIPT=https://raw.githubusercontent.com/ismail-kattakath/comfyui-provisioner/main/providers/vastai/onstart.sh \
          -e HF_TOKEN=$HF_TOKEN \
          -e CIVITAI_API_KEY=$CIVITAI_API_KEY \
          -e GH_TOKEN=$GITHUB_PAT \
          -e STACK_REPO=owner/your-stack-repo \
+         -e VOLUME_ID=$VOLUME_ID \
          -e PORTAL_CONFIG='$PORTAL' \
          -e COMFYUI_ARGS='--disable-auto-launch --port 18188 --enable-cors-header --enable-manager' \
          -e OPEN_BUTTON_PORT=1111 \
@@ -64,6 +95,14 @@ vastai create instance <offer-id> \
 # Get the new instance's SSH URL (use the direct IP, not the proxied ssh8.vast.ai address)
 vastai ssh-url <new-instance-id>
 ```
+
+### How the volume saves re-downloads
+
+The framework's Phase 5 already short-circuits on existing models:
+- **HF / public URL downloads** (`MODEL_MAP`): size match → skip. Set `VERIFY_HASHES=1` to also sha256-check against the HF etag.
+- **Civitai downloads** (`MODEL_MAP_CIVITAI`): always sha256-verified against the hash in the stack's config.
+
+So when a stack's Phase 5 sees its models already present on the volume (from a previous instance), every entry resolves to `[ok] <path> (<size> bytes)` in milliseconds instead of re-downloading. First-time downloads go to the volume; subsequent boots see them and skip.
 
 The vastai/comfy image's normal boot now drives everything:
 1. `/etc/vast_boot.d/36-sync-workspace.sh` copies ComfyUI into `/workspace/ComfyUI`
@@ -78,6 +117,7 @@ The vastai/comfy image's normal boot now drives everything:
 |---|---|---|
 | `HF_TOKEN` | yes | HuggingFace model downloads (gated + Bearer auth) |
 | `STACK_REPO` | yes | `owner/repo` containing `provisioner-config.sh` + `comfyui/` |
+| `VOLUME_ID` | yes | VastAI network volume id. Paired with `--volume $VOLUME_ID:/workspace/ComfyUI/models`. Provisioner aborts if unset or if mountpoint check fails. |
 | `GH_TOKEN` | if STACK_REPO is private | GitHub PAT with `repo` read scope |
 | `CIVITAI_API_KEY` | recommended | Civitai LoRA downloads. Phase 5 warns if unset. |
 

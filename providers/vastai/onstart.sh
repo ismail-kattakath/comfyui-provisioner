@@ -15,12 +15,22 @@
 #
 # Wiring on a VastAI instance (vastai create instance ...):
 #   --onstart-cmd '/opt/instance-tools/bin/entrypoint.sh'      <-- image normal boot
+#   --volume <VOLUME_ID>:/workspace/ComfyUI/models             <-- REQUIRED — persistent models
 #   --env "-e PROVISIONING_SCRIPT=<url-to-this-file> \
 #          -e HF_TOKEN=hf_xxx \
 #          -e STACK_REPO=owner/your-stack \
+#          -e VOLUME_ID=<id-of-your-volume> \
 #          -e PORTAL_CONFIG=... \
 #          -e COMFYUI_ARGS=... \
 #          ..."
+#
+# The --volume flag is mandatory: this script aborts at preflight if
+# VOLUME_ID is unset OR /workspace/ComfyUI/models is not a mountpoint.
+# Rationale: prevents accidental re-download of large model files each
+# time you destroy + recreate an instance during a multi-workflow session.
+# Create the volume once with `vastai create volume --size 200` and reuse
+# it across every instance for that work session — models persist between
+# destroys; only ComfyUI core + custom_nodes are re-installed.
 #
 # See providers/vastai/template.json for the full env-var set and
 # providers/vastai/README.md for the full create command + rationale.
@@ -35,6 +45,9 @@
 # Required env (from --env at instance create):
 #   HF_TOKEN          HuggingFace token (gated models + workflow fallbacks)
 #   STACK_REPO        owner/repo containing provisioner-config.sh + comfyui/
+#   VOLUME_ID         VastAI network volume id (persistent storage for models)
+#                     — paired with `--volume $VOLUME_ID:/workspace/ComfyUI/models`
+#                     on the create-instance command.
 #
 # Required if STACK_REPO is private:
 #   GH_TOKEN          GitHub PAT with read access to STACK_REPO
@@ -58,6 +71,23 @@ exec > >(tee -a /workspace/provision.log) 2>&1
 
 : "${HF_TOKEN:?HF_TOKEN must be set via --env}"
 : "${STACK_REPO:?STACK_REPO must be set via --env (format: owner/repo)}"
+: "${VOLUME_ID:?VOLUME_ID must be set via --env. Create a volume first:
+    vastai create volume --size 200 --geolocation NO    # 200 GB in Norway, for example
+  Then attach it on instance create:
+    --volume \$VOLUME_ID:/workspace/ComfyUI/models -e VOLUME_ID=\$VOLUME_ID
+  Persisting models on a volume avoids re-downloading them every boot.}"
+
+# Verify the volume actually got mounted at the expected path. If VOLUME_ID
+# was set in env but no --volume flag was passed on `vastai create instance`,
+# /workspace/ComfyUI/models will be a plain directory on instance disk and
+# our 75+ GB of models would land there only to be wiped on destroy.
+if ! mountpoint -q /workspace/ComfyUI/models 2>/dev/null; then
+  echo "[onstart] FATAL: VOLUME_ID=$VOLUME_ID is set but /workspace/ComfyUI/models is NOT a mountpoint." >&2
+  echo "[onstart]        Did you forget the --volume flag on 'vastai create instance'?" >&2
+  echo "[onstart]        Add: --volume \$VOLUME_ID:/workspace/ComfyUI/models" >&2
+  exit 1
+fi
+echo "[onstart] volume check OK: VOLUME_ID=$VOLUME_ID mounted at /workspace/ComfyUI/models"
 
 STACK_BRANCH="${STACK_BRANCH:-main}"
 STACK_DIR="${STACK_DIR:-/workspace/$(basename "$STACK_REPO")}"
