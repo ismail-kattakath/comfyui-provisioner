@@ -37,15 +37,17 @@ bash scripts/provision-comfyui.sh
 
 Tracked (part of the public repo):
 - `scripts/provision-comfyui.sh` — generic 7-phase provisioner (preflight, system, tokens, nodes, workflows, models, manager-update, restart)
+- `scripts/preflight-stack.sh` — GPU-free readiness checker (T0–T4 tiers; see Stack Onboarding)
+- `scripts/stack-lock.sh` — provenance backfill: records HF sha256 + optionally pins NODE_MAP commits (see Stack Onboarding)
 - `providers/vastai/` — VastAI `--onstart-cmd` bootstrap + saved template + README
-- `providers/runpod/` — stub (TODO)
+- `providers/runpod/` — RunPod `onstart.sh`, `launch.sh`, and `template.json` (fully implemented)
 - `providers/local/launch.sh` — macOS/Linux dev workflow
 - `requirements.compiled`, `override.txt` — pinned base Python deps (uv-compiled)
 - `README.md`, `LICENSE` (MIT)
 - `.gitignore` — excludes `.env`, `.claude/settings.local.json`, caches, runtime artifacts
 
 Untracked (local Claude Code workspace + dev env, gitignored where appropriate):
-- `.claude/` — project config: hooks (`load-env.sh`), skills (civitai, huggingface, github, vast-ai, runpod, dockerhub, homebrew, ollama, context7, memory, etc.), settings
+- `.claude/` — project config: hooks (`load-env.sh`), skills (civitai, huggingface, github, vast-ai, runpod, dockerhub, homebrew, ollama, context7, memory, groom-stack, etc.), settings
 - `.env` / `.env.example` — local secrets (HF_TOKEN, CIVITAI_API_KEY, GITHUB_TOKEN, VAST_API_KEY, RUNPOD_API_KEY, SSH_KEY_FILE)
 - `.mcp.json` — MCP server definitions for development tooling
 - `.vscode/settings.json` — VS Code workspace
@@ -56,7 +58,7 @@ Untracked (local Claude Code workspace + dev env, gitignored where appropriate):
 ## The contract this framework expects
 
 A "stack repo" (separate from this one) ships at its root:
-- `provisioner-config.sh` — exports five bash arrays: `NODE_MAP` (custom nodes + pins), `ALIAS_MAP` (legacy→canonical folder renames), `MODEL_MAP` (HF + public URL downloads), `MODEL_MAP_CIVITAI` (sha256-verified Civitai), `WORKFLOW_MAP` (workflows to stage)
+- `provisioner-config.sh` — exports five bash arrays: `NODE_MAP` (custom nodes + pins), `ALIAS_MAP` (legacy→canonical folder renames), `MODEL_MAP` (HF + public URL downloads), `MODEL_MAP_CIVITAI` (sha256-verified Civitai), `WORKFLOW_MAP` (workflows to stage); plus an optional `MANUAL_MODELS=( ... )` array for assets that require out-of-band placement
 - `comfyui/` — workflow JSON files (+ optional `comfy.settings.json`)
 
 Provider bootstraps (`providers/*/onstart.sh`) clone both repos at runtime — provisioner-as-framework + stack-as-config — and wire them together via `PROVISIONER_CONFIG` + `WORKFLOWS_SRC_DIR`. The framework itself never references your stack by name.
@@ -69,6 +71,9 @@ Provider bootstraps (`providers/*/onstart.sh`) clone both repos at runtime — p
 - **Secrets:** never commit `.env`. Use `.env.example` to document what env vars are expected.
 - **Testing:** `bash -n` for syntax; dry-run with all SKIP flags except the phase you want to test for behavioral validation
 - **Provider parity:** each `providers/<name>/onstart.sh` must produce identical end-state given the same `PROVISIONER_CONFIG` + tokens — the only differences are how the env is injected and how the service is restarted
+- **Zero-trust:** every github.com/huggingface.co/civitai.com access ALWAYS uses `$GITHUB_TOKEN`/`$HF_TOKEN`/`$CIVITAI_API_KEY`. A missing required token is NOT-READY — never a silent skip. No inline credentials in config files.
+- **Maximal pinning purity:** full fetchable commit SHA per `NODE_MAP` entry; recorded sha256 per `MODEL_MAP` HF entry; versioned numeric ID per `MODEL_MAP_CIVITAI` entry; no floating HF `/resolve/main/` refs.
+- **`scripts/preflight-stack.sh` and `scripts/stack-lock.sh`:** run without prompts (both are in the permission allowlist). See Stack Onboarding for usage.
 
 ## Important Notes
 
@@ -79,6 +84,55 @@ Provider bootstraps (`providers/*/onstart.sh`) clone both repos at runtime — p
 - **PreToolUse hook may block credential strings** in `Write`/`Edit` calls. If a legitimate write hits the block, fall back to a Bash heredoc: `cat > file <<'EOF' … EOF`. Same applies to writes outside cwd (sibling-folder edits).
 - **Stop hook policy** — only block `Stop` for work Claude can still finish now. Ending the turn with a user question is always acceptable; do not block on pending clarifications.
 - **`provision.log` survives reruns** — onstart pipes through `tee -a`, never truncating. Inspect it across multiple boots of the same instance to see the full provisioning timeline.
+- **`stack-lock` known limitation** — `scripts/stack-lock.sh` does not yet rewrite floating HF `/resolve/main/` refs to `/resolve/<commit>/`. After locking, `--strict` preflight will still emit T4 WARNs for those refs. This is an accepted purity backlog item — note it in grooming reports but do not block deployment on it.
+- **`MANUAL_MODELS` array** — stacks may declare `MANUAL_MODELS=( "path/to/asset.safetensors" )` in `provisioner-config.sh` for assets that require out-of-band placement (personal fine-tunes, licensed-only, no public URL). `preflight-stack.sh` treats these as known, not gaps. Known patterns from the calibration corpus: `next-scene_lora`, `SexGod_*`, `beeg23`, `phool-realism`.
+- **Preflight exit codes** — `0` READY / `2` NEEDS-FETCH (composable but models not on disk) / `1` NOT-READY (hard failure). Exit code 2 is normal pre-deployment state — not an error.
+- **Preflight calibration** — known-good `comfyui-stack-*` repos pass T0–T3 in default mode. A T0–T3 failure in a known-good repo means the checker is wrong, not the stack.
+
+## Stack Onboarding / Grooming
+
+Use these tools to assess and drive a stack repo to deployment quality before renting a GPU.
+
+### Readiness ladder
+
+| Tier | What it checks | Hard fail? |
+|------|---------------|------------|
+| T0 structural | `provisioner-config.sh` present + parses + 5 arrays defined; `comfyui/` exists | Always |
+| T1 referential | `WORKFLOW_MAP` files present in `comfyui/`; `ALIAS_MAP` targets valid | Always |
+| T2 reachability | Node + model URLs return 2xx (HEAD / 1-byte range GET only) | Always |
+| T3 provenance | Model sha256 recorded or obtainable; Civitai version IDs present | Always |
+| T4 coherence | Node pins are full SHAs; no floating HF refs; all workflow refs accounted for | WARN (hard under `--strict`) |
+
+### Scripts
+
+```bash
+# Read-only preflight check — never downloads model bytes
+bash scripts/preflight-stack.sh [--strict] [--verify-pins] [--json] [STACK_DIR]
+
+# Backfill MODEL_MAP sha256 from HF X-Linked-Etag + optionally pin NODE_MAP commits
+# Dry-run by default; --write applies changes (keeps .bak)
+bash scripts/stack-lock.sh [--write] [--pin-nodes] [STACK_DIR]
+```
+
+### Grooming workflow (manual)
+
+1. `bash scripts/preflight-stack.sh <STACK_DIR>` — assess current state
+2. Fix any T0/T1 blockers (structural / referential)
+3. `bash scripts/stack-lock.sh --write --pin-nodes <STACK_DIR>` — record provenance
+4. Identify remaining T4 WARNs; add legitimately-manual assets to `MANUAL_MODELS`
+5. `bash scripts/preflight-stack.sh --strict <STACK_DIR>` — verify purity (note floating HF ref limitation as backlog)
+6. Declare READY/NEEDS-FETCH/NOT-READY
+
+### Automated grooming via agents
+
+| Agent | Use when |
+|-------|----------|
+| `stack-preflight` | Fast read-only assessment of one stack; no edits |
+| `stack-groomer` | Full drive-to-quality: preflight → lock → MANUAL_MODELS → strict; edits `provisioner-config.sh` |
+
+Invoke the `groom-stack` skill (in this conversation context) for an interactive guided
+grooming session. Dispatch `stack-groomer` as a background subagent when you want
+unattended grooming of a stack.
 
 ## Tool Routing
 
@@ -177,6 +231,8 @@ Custom definitions live in `.claude/agents/*.md` (project scope, version-control
 This project defines:
 - `vastai-stack-deployer` — finds an offer, creates an instance, polls until running; reports instance ID + SSH URL
 - `vastai-stack-verifier` — SSH-checks nodes, workflow JSON, models, and ComfyUI HTTP on a running instance
+- `stack-preflight` — read-only T0–T4 readiness check on a stack repo; returns READY/NEEDS-FETCH/NOT-READY + concrete remediation
+- `stack-groomer` — drives a stack to quality (preflight → lock → MANUAL_MODELS → strict) and reports changes made to `provisioner-config.sh`
 
 ### Teammate rules (Agent Teams)
 
