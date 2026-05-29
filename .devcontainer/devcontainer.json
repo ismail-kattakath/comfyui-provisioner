@@ -16,8 +16,8 @@
     "source=${localEnv:HOME}/.claude,target=/home/vscode/.claude,type=bind",
     "source=${localEnv:HOME}/.config/gh,target=/home/vscode/.config/gh,type=bind"
   ],
-  "postCreateCommand": "direnv allow .",
-  "postStartCommand": "comfy install --cpu",
+  "postCreateCommand": "comfy --skip-prompt install --cpu",
+  "postAttachCommand": "direnv allow .",
   "forwardPorts": [
     8188
   ],
@@ -25,15 +25,12 @@
     "vscode": {
       "extensions": [
         "piiq.code-comfyui",
-        "akamud.vscode-theme-onedark",
         "fuadpashayev.bottom-terminal",
-        "Anthropic.claude-code",
+        "anthropic.claude-code",
         "mkhl.direnv",
-        "ms-azuretools.vscode-containers"
-      ],
-      "settings": {
-        "workbench.colorTheme": "Atom One Dark"
-      }
+        "ms-azuretools.vscode-containers",
+        "shd101wyy.markdown-preview-enhanced"
+      ]
     }
   }
 }
