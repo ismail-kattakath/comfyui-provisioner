@@ -69,7 +69,7 @@ runpodctl create pod \
   --env "PUBLIC_KEY=$(cat ~/.ssh/id_ed25519.pub)" \
   --env "HF_TOKEN=$HF_TOKEN" \
   --env "STACK_REPO=owner/your-stack" \
-  --env "GH_TOKEN=$GH_TOKEN" \
+  --env "GITHUB_TOKEN=$GITHUB_TOKEN" \
   --containerStartCommand 'bash -c "curl -fsSL https://raw.githubusercontent.com/ismail-kattakath/comfyui-provisioner/main/providers/runpod/onstart.sh | bash"'
 ```
 
@@ -79,7 +79,7 @@ runpodctl create pod \
 # Dry-print (review before paying):
 HF_TOKEN=$HF_TOKEN \
 STACK_REPO=owner/your-stack \
-GH_TOKEN=$GH_TOKEN \
+GITHUB_TOKEN=$GITHUB_TOKEN \
 bash providers/runpod/launch.sh --gpu-type "NVIDIA GeForce RTX 4090"
 
 # Execute:
@@ -246,8 +246,8 @@ bash /workspace/reprovision.sh
 ```
 
 **Private stack repo fails to clone:**
-Verify `GH_TOKEN` is set and has `repo` read scope. The token must have access
-to `STACK_REPO`. Test from SSH: `git ls-remote https://$GH_TOKEN@github.com/$STACK_REPO.git`.
+Verify `GITHUB_TOKEN` is set and has `repo` read scope. The token must have access
+to `STACK_REPO`. Test from SSH: `git ls-remote https://$GITHUB_TOKEN@github.com/$STACK_REPO.git`.
 
 **Pod suspends after idle timeout:**
 RunPod pauses idle pods after a configurable timeout. On resume, the Container

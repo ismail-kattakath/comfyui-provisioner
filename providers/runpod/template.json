@@ -1,6 +1,6 @@
 {
   "_comment": "RunPod pod template definition for comfyui-provisioner. Use this as a reference for the runpodctl create pod command or the RunPod web UI. See providers/runpod/README.md for the full walkthrough.",
-  "_usage": "runpodctl create pod --name comfyui-mystack --imageName yanwk/comfyui-boot:cu124-slim --containerDiskInGb 100 --volumeInGb 0 --volumeMountPath /workspace --ports '8188/http,22/tcp' --gpuType 'NVIDIA GeForce RTX 4090' --gpuCount 1 --minMemoryInGb 24 --env 'PUBLIC_KEY=<SSH_PUBLIC_KEY>' --env 'HF_TOKEN=<REPLACE_ME>' --env 'STACK_REPO=owner/your-stack' --env 'GH_TOKEN=<REPLACE_ME>' --containerStartCommand 'bash -c \"curl -fsSL https://raw.githubusercontent.com/ismail-kattakath/comfyui-provisioner/main/providers/runpod/onstart.sh | bash\"'",
+  "_usage": "runpodctl create pod --name comfyui-mystack --imageName yanwk/comfyui-boot:cu124-slim --containerDiskInGb 100 --volumeInGb 0 --volumeMountPath /workspace --ports '8188/http,22/tcp' --gpuType 'NVIDIA GeForce RTX 4090' --gpuCount 1 --minMemoryInGb 24 --env 'PUBLIC_KEY=<SSH_PUBLIC_KEY>' --env 'HF_TOKEN=<REPLACE_ME>' --env 'STACK_REPO=owner/your-stack' --env 'GITHUB_TOKEN=<REPLACE_ME>' --containerStartCommand 'bash -c \"curl -fsSL https://raw.githubusercontent.com/ismail-kattakath/comfyui-provisioner/main/providers/runpod/onstart.sh | bash\"'",
   "image": "yanwk/comfyui-boot:cu124-slim",
   "containerDiskInGb": 100,
   "volumeInGb": 0,
@@ -12,7 +12,7 @@
     "HF_TOKEN": "REPLACE_ME — HuggingFace token (hf_...)",
     "STACK_REPO": "REPLACE_ME — owner/repo of your stack (e.g. owner/comfyui-stack-example)",
     "STACK_BRANCH": "main",
-    "GH_TOKEN": "REPLACE_ME_OR_OMIT — GitHub PAT with repo read scope (required for private stacks)",
+    "GITHUB_TOKEN": "REPLACE_ME_OR_OMIT — GitHub PAT with repo read scope (required for private stacks)",
     "CIVITAI_API_KEY": "REPLACE_ME_OR_OMIT — Civitai API key (required if stack downloads Civitai LoRAs)",
     "SYNCTHING_PEER_DEVICE_ID": "REPLACE_ME_OR_OMIT — your laptop's Syncthing device ID for workflow auto-pair",
     "SYNCTHING_PEER_NAME": "local-peer",

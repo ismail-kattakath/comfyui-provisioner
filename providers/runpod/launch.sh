@@ -23,7 +23,7 @@
 # Environment (read from shell or .env):
 #   HF_TOKEN          (required) HuggingFace token
 #   STACK_REPO        (required) owner/repo e.g. owner/my-comfyui-stack
-#   GH_TOKEN          (optional) GitHub PAT for private stacks
+#   GITHUB_TOKEN          (optional) GitHub PAT for private stacks
 #   CIVITAI_API_KEY   (optional) Civitai token
 #   STACK_BRANCH      (optional, default: main)
 #   SYNCTHING_PEER_DEVICE_ID  (optional) Laptop Syncthing device ID for auto-pair
@@ -85,7 +85,7 @@ ENV_ARGS=(
   "--env" "STACK_REPO=${STACK_REPO}"
   "--env" "STACK_BRANCH=${STACK_BRANCH}"
 )
-[ -n "${GH_TOKEN:-}" ]             && ENV_ARGS+=("--env" "GH_TOKEN=${GH_TOKEN}")
+[ -n "${GITHUB_TOKEN:-}" ]             && ENV_ARGS+=("--env" "GITHUB_TOKEN=${GITHUB_TOKEN}")
 [ -n "${CIVITAI_API_KEY:-}" ]      && ENV_ARGS+=("--env" "CIVITAI_API_KEY=${CIVITAI_API_KEY}")
 [ -n "${SYNCTHING_PEER_DEVICE_ID:-}" ] && ENV_ARGS+=("--env" "SYNCTHING_PEER_DEVICE_ID=${SYNCTHING_PEER_DEVICE_ID}")
 

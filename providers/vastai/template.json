@@ -10,7 +10,7 @@
     "PROVISIONING_SCRIPT": "https://raw.githubusercontent.com/ismail-kattakath/comfyui-provisioner/main/providers/vastai/onstart.sh",
     "HF_TOKEN": "REPLACE_ME",
     "CIVITAI_API_KEY": "REPLACE_ME_or_omit_if_no_civitai_models",
-    "GH_TOKEN": "REPLACE_ME_if_STACK_REPO_is_private",
+    "GITHUB_TOKEN": "REPLACE_ME_if_STACK_REPO_is_private",
     "STACK_REPO": "owner/your-stack-repo",
     "STACK_BRANCH": "main",
     "VOLUME_ID": "REPLACE_ME_volume_id_or_omit",

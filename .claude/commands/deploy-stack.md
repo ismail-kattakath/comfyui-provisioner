@@ -95,5 +95,5 @@ Report back:
   re-invocation mechanism requires the current turn to end.
 - **Offer failures**: if the deployer reports a load timeout (>30 min), record the offer
   ID as unreliable in memory and offer retry on a new offer.
-- **Token safety**: never echo `HF_TOKEN`, `CIVITAI_API_KEY`, `GH_TOKEN`, or `VAST_API_KEY`
+- **Token safety**: never echo `HF_TOKEN`, `CIVITAI_API_KEY`, `GITHUB_TOKEN`, or `VAST_API_KEY`
   in any message to the user.

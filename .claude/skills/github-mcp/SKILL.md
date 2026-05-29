@@ -5,7 +5,7 @@ description: GitHub's official MCP server for repository management, issues, pul
 
 # GitHub MCP Server — Tool Reference
 
-Official server from `ghcr.io/github/github-mcp-server`. Configured in `.mcp.json` as `"github"` (Docker stdio). Requires `GITHUB_PERSONAL_ACCESS_TOKEN` in `.env`, loaded automatically at session start.
+Official server from `ghcr.io/github/github-mcp-server`. Configured in `.mcp.json` as `"github"` (Docker stdio). Requires `GITHUB_TOKEN` in `.env`, loaded automatically at session start.
 
 ## Toolsets
 
@@ -168,7 +168,7 @@ get_file_contents(owner=X, repo=Y, path="src/main.py", ref="main")
 ## Configuration
 
 ```
-GITHUB_PERSONAL_ACCESS_TOKEN  — GitHub PAT (github.com/settings/tokens)
+GITHUB_TOKEN  — GitHub PAT (github.com/settings/tokens)
 GITHUB_TOOLSETS               — Comma-separated toolsets (default: context,repos,issues,pull_requests,users)
                                 Use "all" to enable everything
 GITHUB_READ_ONLY              — Set to "1" to disable all write tools

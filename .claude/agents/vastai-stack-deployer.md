@@ -55,7 +55,7 @@ vastai create instance "$OFFER_ID" \
     -e PROVISIONING_SCRIPT=https://raw.githubusercontent.com/ismail-kattakath/comfyui-provisioner/main/providers/vastai/onstart.sh \
     -e HF_TOKEN=$HF_TOKEN \
     -e CIVITAI_API_KEY=$CIVITAI_API_KEY \
-    -e GH_TOKEN=$GITHUB_PERSONAL_ACCESS_TOKEN \
+    -e GITHUB_TOKEN=$GITHUB_TOKEN \
     -e STACK_REPO=$STACK_REPO \
     -e PORTAL_CONFIG='$PORTAL' \
     -e COMFYUI_ARGS='--disable-auto-launch --port 18188 --enable-cors-header --enable-manager' \

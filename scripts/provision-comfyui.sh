@@ -44,7 +44,7 @@ banner "Phase 0 — Preflight"
 
 : "${HF_TOKEN:?HF_TOKEN must be set in the environment for HuggingFace downloads}"
 log "HF_TOKEN: $(mask "$HF_TOKEN")"
-[ -n "${GH_TOKEN:-}" ]         && log "GH_TOKEN: $(mask "$GH_TOKEN")"         || log "GH_TOKEN: (unset)"
+[ -n "${GITHUB_TOKEN:-}" ]         && log "GITHUB_TOKEN: $(mask "$GITHUB_TOKEN")"         || log "GITHUB_TOKEN: (unset)"
 [ -n "${CIVITAI_API_KEY:-}" ]  && log "CIVITAI_API_KEY: $(mask "$CIVITAI_API_KEY")" || log "CIVITAI_API_KEY: (unset)"
 
 # ---------- Config (NODE_MAP, ALIAS_MAP, MODEL_MAP, MODEL_MAP_CIVITAI, WORKFLOW_MAP) ----------
@@ -242,11 +242,11 @@ filesize() {
   fi
 }
 
-# Inject x-access-token for github clones when GH_TOKEN set
+# Inject x-access-token for github clones when GITHUB_TOKEN set
 git_auth_url() {
   local url="$1"
-  if [ -n "${GH_TOKEN:-}" ] && [[ "$url" == https://github.com/* ]]; then
-    printf 'https://x-access-token:%s@github.com/%s' "$GH_TOKEN" "${url#https://github.com/}"
+  if [ -n "${GITHUB_TOKEN:-}" ] && [[ "$url" == https://github.com/* ]]; then
+    printf 'https://x-access-token:%s@github.com/%s' "$GITHUB_TOKEN" "${url#https://github.com/}"
   else
     printf '%s' "$url"
   fi
@@ -319,7 +319,7 @@ fi
 
 # --enable-manager in COMFYUI_ARGS
 DEFAULT_COMFY_ARGS="--listen 0.0.0.0 --port $COMFY_PORT --enable-cors-header --enable-manager"
-if [ "$PLATFORM" = "Linux" ] && [ -f /etc/environment ]; then
+if [ "$PLATFORM" = "Linux" ] && [ -f /etc/environment ] && [ -w /etc/environment ]; then
   ARGS_FILE="/etc/environment"
   if grep -qE '^COMFYUI_ARGS=' "$ARGS_FILE"; then
     if ! grep -E '^COMFYUI_ARGS=' "$ARGS_FILE" | grep -q -- "--enable-manager"; then
@@ -378,7 +378,7 @@ else
 fi
 
 # Persist tokens
-if [ "$PLATFORM" = "Linux" ] && [ -f /etc/environment ]; then
+if [ "$PLATFORM" = "Linux" ] && [ -f /etc/environment ] && [ -w /etc/environment ]; then
   TOKEN_FILE="/etc/environment"
 else
   TOKEN_FILE="$HOME/.comfyui-tokens.env"
@@ -386,7 +386,7 @@ else
 fi
 log "Persisting tokens to $TOKEN_FILE"
 [ -n "${HF_TOKEN:-}" ]        && upsert_kv "$TOKEN_FILE" "HF_TOKEN"        "$HF_TOKEN"
-[ -n "${GH_TOKEN:-}" ]        && upsert_kv "$TOKEN_FILE" "GH_TOKEN"        "$GH_TOKEN"
+[ -n "${GITHUB_TOKEN:-}" ]        && upsert_kv "$TOKEN_FILE" "GITHUB_TOKEN"        "$GITHUB_TOKEN"
 [ -n "${CIVITAI_API_KEY:-}" ] && upsert_kv "$TOKEN_FILE" "CIVITAI_API_KEY" "$CIVITAI_API_KEY"
 if [ "$TOKEN_FILE" = "$HOME/.comfyui-tokens.env" ]; then
   chmod 600 "$TOKEN_FILE"

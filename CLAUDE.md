@@ -18,7 +18,9 @@ done
 # Validate the VastAI template JSON
 jq empty providers/vastai/template.json
 
-# Dry-run against a sample stack config (sandbox COMFYUI_DIR, skip everything except the phase you're testing)
+# Dry-run against a sample stack config (sandbox COMFYUI_DIR, skip everything except the phase you're testing).
+# Set FORCE_RESTAGE=1 when iterating on workflow JSON content — Phase 4 then overwrites the
+# destination file instead of preserving it (the default behaviour protects in-place user edits).
 SANDBOX=/tmp/comfyui-sandbox
 mkdir -p "$SANDBOX/user/default/workflows" "$SANDBOX/custom_nodes" "$SANDBOX/models"
 HF_TOKEN=dummy \
@@ -27,6 +29,7 @@ COMFYUI_DIR="$SANDBOX" \
 PROVISIONER_CONFIG=/path/to/your/stack/provisioner-config.sh \
 WORKFLOWS_SRC_DIR=/path/to/your/stack/comfyui \
 SKIP_SYSTEM=1 SKIP_NODES=1 SKIP_MODELS=1 SKIP_UPDATE_ALL=1 SKIP_RESTART=1 \
+FORCE_RESTAGE=1 \
 bash scripts/provision-comfyui.sh
 ```
 
@@ -34,7 +37,6 @@ bash scripts/provision-comfyui.sh
 
 Tracked (part of the public repo):
 - `scripts/provision-comfyui.sh` — generic 7-phase provisioner (preflight, system, tokens, nodes, workflows, models, manager-update, restart)
-- `scripts/start-comfy.sh` — local ComfyUI launcher (dev helper)
 - `providers/vastai/` — VastAI `--onstart-cmd` bootstrap + saved template + README
 - `providers/runpod/` — stub (TODO)
 - `providers/local/launch.sh` — macOS/Linux dev workflow
@@ -44,7 +46,7 @@ Tracked (part of the public repo):
 
 Untracked (local Claude Code workspace + dev env, gitignored where appropriate):
 - `.claude/` — project config: hooks (`load-env.sh`), skills (civitai, huggingface, github, vast-ai, runpod, dockerhub, homebrew, ollama, context7, memory, etc.), settings
-- `.env` / `.env.example` — local secrets (HF_TOKEN, CIVITAI_API_KEY, GH_TOKEN/GITHUB_PERSONAL_ACCESS_TOKEN, VAST_API_KEY, RUNPOD_API_KEY, SSH_KEY_FILE)
+- `.env` / `.env.example` — local secrets (HF_TOKEN, CIVITAI_API_KEY, GITHUB_TOKEN, VAST_API_KEY, RUNPOD_API_KEY, SSH_KEY_FILE)
 - `.mcp.json` — MCP server definitions for development tooling
 - `.vscode/settings.json` — VS Code workspace
 - `.worktreeinclude` — Claude Code worktree config

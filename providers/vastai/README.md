@@ -14,7 +14,7 @@ What you fill in before clicking Rent:
 | Env var | Required? | Note |
 |---|---|---|
 | `HF_TOKEN` | yes | `hf_...` — HuggingFace token |
-| `GH_TOKEN` | yes (private stacks) | `ghp_...` — GitHub PAT with `repo` read scope |
+| `GITHUB_TOKEN` | yes (private stacks) | `ghp_...` — GitHub PAT with `repo` read scope |
 | `STACK_REPO` | yes | `owner/repo` of your stack (default = `ismail-kattakath/comfyui-stack-qwen-image-edit-aio`) |
 | `CIVITAI_API_KEY` | optional | Required only if your stack has Civitai LoRAs |
 | `VOLUME_ID` | optional | Set the id + add `--link-volume <id> --mount-path /workspace/ComfyUI/models` in the volume section. See "Optional: persistent network volume" below. |
@@ -130,7 +130,7 @@ vastai create instance <offer-id> \
          -e PROVISIONING_SCRIPT=https://raw.githubusercontent.com/ismail-kattakath/comfyui-provisioner/main/providers/vastai/onstart.sh \
          -e HF_TOKEN=$HF_TOKEN \
          -e CIVITAI_API_KEY=$CIVITAI_API_KEY \
-         -e GH_TOKEN=$GITHUB_PAT \
+         -e GITHUB_TOKEN=$GITHUB_PAT \
          -e STACK_REPO=owner/your-stack-repo \
          -e VOLUME_ID=$VOLUME_ID \
          -e PORTAL_CONFIG='$PORTAL' \
@@ -220,7 +220,7 @@ The vastai/comfy image's normal boot now drives everything:
 |---|---|---|
 | `HF_TOKEN` | yes | HuggingFace model downloads (gated + Bearer auth) |
 | `STACK_REPO` | yes | `owner/repo` containing `provisioner-config.sh` + `comfyui/` |
-| `GH_TOKEN` | if STACK_REPO is private | GitHub PAT with `repo` read scope |
+| `GITHUB_TOKEN` | if STACK_REPO is private | GitHub PAT with `repo` read scope |
 | `VOLUME_ID` | recommended (when available) | VastAI volume id. Paired with `--link-volume $VOLUME_ID --mount-path /workspace/ComfyUI/models`. When set, persistence is enabled; when unset, framework runs without persistence. If set but mount missing, provisioner FATALs (intent mismatch). |
 | `CIVITAI_API_KEY` | recommended | Civitai LoRA downloads. Phase 5 warns if unset. |
 

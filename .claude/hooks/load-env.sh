@@ -22,4 +22,7 @@ if [ -f "$ENV_FILE" ] && [ -n "${CLAUDE_ENV_FILE:-}" ]; then
     [[ "$line" == *"="* ]] || continue
     echo "export $line" >> "$CLAUDE_ENV_FILE"
   done < "$ENV_FILE"
+  # Bridge: GitHub MCP server reads GITHUB_PERSONAL_ACCESS_TOKEN inside its Docker container;
+  # forward it from GITHUB_TOKEN so .env only needs one variable.
+  printf '%s\n' '[ -n "${GITHUB_TOKEN:-}" ] && [ -z "${GITHUB_PERSONAL_ACCESS_TOKEN:-}" ] && export GITHUB_PERSONAL_ACCESS_TOKEN="$GITHUB_TOKEN"' >> "$CLAUDE_ENV_FILE"
 fi

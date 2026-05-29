@@ -18,7 +18,7 @@
 #   --containerStartCommand 'bash -c "curl -fsSL <url-to-this-file> | bash"'
 #   --env "HF_TOKEN=hf_xxx"
 #   --env "STACK_REPO=owner/your-stack"
-#   --env "GH_TOKEN=ghp_xxx"         (private stacks)
+#   --env "GITHUB_TOKEN=ghp_xxx"         (private stacks)
 #   ...
 #
 # No portal / Caddy / supervisord here. ComfyUI is launched directly via
@@ -31,7 +31,7 @@
 #   STACK_REPO        owner/repo containing provisioner-config.sh + comfyui/
 #
 # Required if STACK_REPO is private:
-#   GH_TOKEN          GitHub PAT with read access to STACK_REPO
+#   GITHUB_TOKEN          GitHub PAT with read access to STACK_REPO
 #
 # Optional env:
 #   CIVITAI_API_KEY        Civitai token (LoRA downloads — Phase 5 warns if unset)
@@ -90,8 +90,8 @@ fi
 # 2. Clone the stack repo (flat — NO --recurse-submodules; only top-level
 #    provisioner-config.sh + comfyui/ are needed at runtime)
 if [ ! -d "$STACK_DIR/.git" ]; then
-  if [ -n "${GH_TOKEN:-}" ]; then
-    auth_url="https://${GH_TOKEN}@github.com/${STACK_REPO}.git"
+  if [ -n "${GITHUB_TOKEN:-}" ]; then
+    auth_url="https://${GITHUB_TOKEN}@github.com/${STACK_REPO}.git"
   else
     auth_url="https://github.com/${STACK_REPO}.git"
   fi
@@ -143,7 +143,7 @@ export HUGGINGFACE_API_KEY="${HF_TOKEN}"
     printf "export HUGGINGFACE_TOKEN=%q\n"    "${HF_TOKEN}"
     printf "export HUGGINGFACE_API_KEY=%q\n"  "${HF_TOKEN}"
     printf "export CIVITAI_API_KEY=%q\n"      "${CIVITAI_API_KEY:-}"
-    printf "export GH_TOKEN=%q\n"             "${GH_TOKEN:-}"
+    printf "export GITHUB_TOKEN=%q\n"             "${GITHUB_TOKEN:-}"
     printf "export STACK_REPO=%q\n"           "${STACK_REPO}"
     printf "export STACK_BRANCH=%q\n"         "${STACK_BRANCH}"
     printf "export STACK_DIR=%q\n"            "${STACK_DIR}"

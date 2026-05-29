@@ -9,8 +9,7 @@ This repo is **self-contained at runtime** — provider bootstraps (`providers/*
 ```
 comfyui-provisioner/
 ├── scripts/
-│   ├── provision-comfyui.sh   # the generic 7-phase provisioner
-│   └── start-comfy.sh         # local ComfyUI launcher (dev helper)
+│   └── provision-comfyui.sh   # the generic 7-phase provisioner
 ├── providers/
 │   ├── vastai/                # VastAI --onstart-cmd bootstrap + template
 │   ├── runpod/                # RunPod pod bootstrap (TODO — stub)
@@ -30,7 +29,7 @@ The provisioner is split into seven idempotent phases:
 | 1 | System update + Manager pip upgrade | `SKIP_SYSTEM=1` |
 | 2 | Persist tokens to `/etc/environment`; set ComfyUI launch args | — |
 | 3 | Clone + pin custom nodes from `NODE_MAP`; install their pip deps | `SKIP_NODES=1` |
-| 4 | Stage workflow JSONs from `WORKFLOW_MAP` (repo source → optional HF fallback) | `SKIP_WORKFLOW=1` |
+| 4 | Stage workflow JSONs from `WORKFLOW_MAP` (repo source → optional HF fallback); `FORCE_RESTAGE=1` overwrites existing destination JSONs instead of preserving them | `SKIP_WORKFLOW=1` |
 | 5 | Download models: `MODEL_MAP` (HF) + `MODEL_MAP_CIVITAI` (with sha256 verify) | `SKIP_MODELS=1` |
 | 6 | ComfyUI-Manager "update all" pass | `SKIP_UPDATE_ALL=1` |
 | 7 | Restart ComfyUI via supervisorctl | `SKIP_RESTART=1` |
@@ -78,7 +77,7 @@ Set `PROVISIONER_CONFIG=/path/to/your/provisioner-config.sh` and `WORKFLOWS_SRC_
 vastai create instance <offer-id> \
   --image vastai/comfy:v0.22.0-cuda-12.9-py312 \
   --disk 200 \
-  --env "-e HF_TOKEN=... -e CIVITAI_API_KEY=... -e GH_TOKEN=... -e STACK_REPO=you/your-stack" \
+  --env "-e HF_TOKEN=... -e CIVITAI_API_KEY=... -e GITHUB_TOKEN=... -e STACK_REPO=you/your-stack" \
   --onstart-cmd 'bash <(curl -fsSL https://raw.githubusercontent.com/ismail-kattakath/comfyui-provisioner/main/providers/vastai/onstart.sh)'
 
 # After ~12-15 min, ComfyUI is at http://<vast-ip>:18188
@@ -92,7 +91,7 @@ See `providers/vastai/README.md` for full details.
 |---|---|---|
 | `HF_TOKEN` | always | HuggingFace downloads (gated + Bearer auth) |
 | `STACK_REPO` | provider bootstraps | `owner/repo` of your stack (cloned by onstart) |
-| `GH_TOKEN` | if `STACK_REPO` is private | GitHub PAT with `repo` read scope |
+| `GITHUB_TOKEN` | if `STACK_REPO` is private | GitHub PAT with `repo` read scope |
 | `CIVITAI_API_KEY` | Phase 5 if `MODEL_MAP_CIVITAI` is non-empty | Civitai downloads |
 | `PROVISIONER_CONFIG` | manual runs | Path to `provisioner-config.sh` (provider bootstraps set this automatically) |
 | `WORKFLOWS_SRC_DIR` | manual runs | Path to dir containing workflow JSONs (provider bootstraps set this too) |

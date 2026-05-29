@@ -11,6 +11,7 @@
 .claude/state/
 
 # IDE / dev caches
+*.code-workspace
 .mypy_cache/
 __pycache__/
 *.pyc

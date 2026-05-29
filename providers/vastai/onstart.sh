@@ -11,7 +11,7 @@
 # INDEPENDENTLY — no recursive submodule descent. The submodule layout that
 # may ship inside a stack repo is purely a local-dev convenience and
 # intentionally not used at runtime (nested submodule clones can't reuse
-# the top-level GH_TOKEN).
+# the top-level GITHUB_TOKEN).
 #
 # Wiring on a VastAI instance (vastai create instance ...):
 #   --onstart-cmd '/opt/instance-tools/bin/entrypoint.sh'      <-- image normal boot
@@ -51,7 +51,7 @@
 #   STACK_REPO        owner/repo containing provisioner-config.sh + comfyui/
 #
 # Required if STACK_REPO is private:
-#   GH_TOKEN          GitHub PAT with read access to STACK_REPO
+#   GITHUB_TOKEN          GitHub PAT with read access to STACK_REPO
 #
 # Optional but recommended:
 #   VOLUME_ID         VastAI volume id (enables persistent storage for models
@@ -151,8 +151,8 @@ fi
 # 2. Clone the stack repo (flat -- NO --recurse-submodules; only top-level
 #    provisioner-config.sh + comfyui/ are needed at runtime)
 if [ ! -d "$STACK_DIR/.git" ]; then
-  if [ -n "${GH_TOKEN:-}" ]; then
-    auth_url="https://${GH_TOKEN}@github.com/${STACK_REPO}.git"
+  if [ -n "${GITHUB_TOKEN:-}" ]; then
+    auth_url="https://${GITHUB_TOKEN}@github.com/${STACK_REPO}.git"
   else
     auth_url="https://github.com/${STACK_REPO}.git"
   fi
@@ -244,7 +244,7 @@ fi
     printf "export HUGGINGFACE_TOKEN=%q\n"    "${HF_TOKEN}"
     printf "export HUGGINGFACE_API_KEY=%q\n"  "${HF_TOKEN}"
     printf "export CIVITAI_API_KEY=%q\n"      "${CIVITAI_API_KEY:-}"
-    printf "export GH_TOKEN=%q\n"           "${GH_TOKEN:-}"
+    printf "export GITHUB_TOKEN=%q\n"           "${GITHUB_TOKEN:-}"
     printf "export STACK_REPO=%q\n"         "${STACK_REPO}"
     printf "export STACK_BRANCH=%q\n"       "${STACK_BRANCH}"
     printf "export STACK_DIR=%q\n"          "${STACK_DIR}"
