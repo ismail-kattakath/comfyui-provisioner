@@ -55,7 +55,7 @@ If exit code 0 or 2, proceed to Step 2.
 ## Step 2 — Lock provenance
 
 ```bash
-bash /workspaces/comfyui-provisioning/scripts/stack-lock.sh --write --pin-nodes "$STACK_DIR" 2>&1
+bash /workspaces/comfyui-provisioning/scripts/stack-lock.sh --write --pin-nodes --pin-hf-rev "$STACK_DIR" 2>&1
 ```
 
 This writes `provisioner-config.sh` in place (a `.bak` is kept). Note:
@@ -63,9 +63,11 @@ This writes `provisioner-config.sh` in place (a `.bak` is kept). Note:
 - How many node pins were written (`[pin]` lines)
 - Any `[miss]` lines — models or nodes where provenance could not be obtained
 
-**Known limitation:** `stack-lock` does not yet rewrite floating HF `/resolve/main/` refs
-to `/resolve/<commit>/`. Under `--strict`, these will remain as T4 WARNs. This is an
-accepted limitation — note each occurrence in the report but do not block on it.
+**`--pin-hf-rev` capability:** Pass this flag to also rewrite floating HF `/resolve/main/`
+(or `/resolve/master/`) refs to pinned `/resolve/<full-40-hex-commit>/` revision URLs by
+reading HF's `X-Repo-Commit` response header. After locking with all three flags,
+`preflight --strict` is expected to exit 0; only genuine T4 advisory WARNs about
+legitimately-manual/missing models may remain.
 
 ## Step 3 — Identify and declare MANUAL_MODELS
 
@@ -106,10 +108,10 @@ bash /workspaces/comfyui-provisioning/scripts/preflight-stack.sh --strict "$STAC
 ```
 
 Review:
-- Any `[FAIL]` NOT caused by the known HF floating-ref limitation must be resolved.
-- Floating HF `/resolve/main/` `[FAIL]` lines under `--strict`: log as remediation backlog,
-  do NOT attempt to fix (stack-lock rewrite not yet implemented).
-- If exit code is still 1 after accounting for the floating-ref backlog, report which
+- Any `[FAIL]` must be resolved. Floating HF `/resolve/main/` FAILs under `--strict`
+  should not appear after locking with `--pin-hf-rev`; if they do, re-run
+  `stack-lock.sh --write --pin-nodes --pin-hf-rev` (a URL may have been missed).
+- If exit code is still 1 after locking, report which
   remaining failures prevent the READY verdict.
 
 ## Step 5 — Report
@@ -125,7 +127,7 @@ Changes made:
   - MANUAL_MODELS: <N> entries added (<list of filenames>)
 
 Residual issues:
-  - Floating HF refs (known stack-lock limitation, remediation backlog):
+  - Floating HF refs (if any remain, re-run with `--pin-hf-rev`):
       <list of affected MODEL_MAP entries>
   - <any other unresolved issues>
 

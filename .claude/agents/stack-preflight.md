@@ -80,7 +80,7 @@ For each tier's results, note which tier (T0–T4) the finding belongs to:
 - T1 referential: workflow files exist, alias targets valid
 - T2 reachability: URLs return 2xx
 - T3 provenance: sha256 recorded or obtainable, Civitai version IDs present
-- T4 coherence: pin purity, no floating refs, all workflow refs accounted for
+- T4 coherence: pin purity, no floating HF refs (resolve with `stack-lock --pin-hf-rev`), all workflow refs accounted for
 
 ## Step 5 — Report
 
@@ -102,8 +102,8 @@ Blockers (<N>):
 
 Purity warnings (<N>):
   - <exact [WARN] line>
-  Note: floating HF /resolve/main/ refs are a known stack-lock limitation —
-        not yet auto-rewritable; log as remediation backlog.
+  Note: floating HF /resolve/main/ refs are resolved by running
+        `stack-lock.sh --write --pin-nodes --pin-hf-rev`.
 
 FETCH needed (<N> models):
   - <exact [FETCH] line>

@@ -84,7 +84,7 @@ Provider bootstraps (`providers/*/onstart.sh`) clone both repos at runtime — p
 - **PreToolUse hook may block credential strings** in `Write`/`Edit` calls. If a legitimate write hits the block, fall back to a Bash heredoc: `cat > file <<'EOF' … EOF`. Same applies to writes outside cwd (sibling-folder edits).
 - **Stop hook policy** — only block `Stop` for work Claude can still finish now. Ending the turn with a user question is always acceptable; do not block on pending clarifications.
 - **`provision.log` survives reruns** — onstart pipes through `tee -a`, never truncating. Inspect it across multiple boots of the same instance to see the full provisioning timeline.
-- **`stack-lock` known limitation** — `scripts/stack-lock.sh` does not yet rewrite floating HF `/resolve/main/` refs to `/resolve/<commit>/`. After locking, `--strict` preflight will still emit T4 WARNs for those refs. This is an accepted purity backlog item — note it in grooming reports but do not block deployment on it.
+- **`stack-lock --pin-hf-rev`** — `scripts/stack-lock.sh` supports `--pin-hf-rev` to rewrite floating HF `/resolve/main/` (or `/resolve/master/`) URLs to pinned `/resolve/<full-40-hex-commit>/` revision URLs. It captures the commit SHA from HF's `X-Repo-Commit` response header. The canonical full-purity lock command is `stack-lock.sh --write --pin-nodes --pin-hf-rev <stack>`. After locking, `--strict` preflight is expected to exit 0; only genuine T4 advisory coherence WARNs about legitimately-manual/missing models may remain.
 - **`MANUAL_MODELS` array** — stacks may declare `MANUAL_MODELS=( "path/to/asset.safetensors" )` in `provisioner-config.sh` for assets that require out-of-band placement (personal fine-tunes, licensed-only, no public URL). `preflight-stack.sh` treats these as known, not gaps. Known patterns from the calibration corpus: `next-scene_lora`, `SexGod_*`, `beeg23`, `phool-realism`.
 - **Preflight exit codes** — `0` READY / `2` NEEDS-FETCH (composable but models not on disk) / `1` NOT-READY (hard failure). Exit code 2 is normal pre-deployment state — not an error.
 - **Preflight calibration** — known-good `comfyui-stack-*` repos pass T0–T3 in default mode. A T0–T3 failure in a known-good repo means the checker is wrong, not the stack.
@@ -109,18 +109,19 @@ Use these tools to assess and drive a stack repo to deployment quality before re
 # Read-only preflight check — never downloads model bytes
 bash scripts/preflight-stack.sh [--strict] [--verify-pins] [--json] [STACK_DIR]
 
-# Backfill MODEL_MAP sha256 from HF X-Linked-Etag + optionally pin NODE_MAP commits
+# Backfill MODEL_MAP sha256 from HF X-Linked-Etag, optionally pin NODE_MAP commits,
+# and optionally rewrite floating HF /resolve/main/ refs to pinned revision URLs.
 # Dry-run by default; --write applies changes (keeps .bak)
-bash scripts/stack-lock.sh [--write] [--pin-nodes] [STACK_DIR]
+bash scripts/stack-lock.sh [--write] [--pin-nodes] [--pin-hf-rev] [STACK_DIR]
 ```
 
 ### Grooming workflow (manual)
 
 1. `bash scripts/preflight-stack.sh <STACK_DIR>` — assess current state
 2. Fix any T0/T1 blockers (structural / referential)
-3. `bash scripts/stack-lock.sh --write --pin-nodes <STACK_DIR>` — record provenance
+3. `bash scripts/stack-lock.sh --write --pin-nodes --pin-hf-rev <STACK_DIR>` — record provenance and pin HF revision URLs
 4. Identify remaining T4 WARNs; add legitimately-manual assets to `MANUAL_MODELS`
-5. `bash scripts/preflight-stack.sh --strict <STACK_DIR>` — verify purity (note floating HF ref limitation as backlog)
+5. `bash scripts/preflight-stack.sh --strict <STACK_DIR>` — verify purity (expected to pass; residual T4 WARNs are genuine missing/manual models only)
 6. Declare READY/NEEDS-FETCH/NOT-READY
 
 ### Automated grooming via agents

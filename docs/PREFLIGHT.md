@@ -221,12 +221,19 @@ scripts/stack-lock.sh --write --pin-nodes [STACK_DIR]
 After writing, re-run preflight with `--strict` to confirm all purity gates pass:
 
 ```bash
-scripts/stack-lock.sh --write --pin-nodes /path/to/stack
+scripts/stack-lock.sh --write --pin-nodes --pin-hf-rev /path/to/stack
 scripts/preflight-stack.sh --strict /path/to/stack
 ```
 
-### Known limitation: HF floating refs
+### Pinning HF floating refs with `--pin-hf-rev`
 
-`stack-lock.sh` currently backfills **sha256** from `X-Linked-Etag` and (with `--pin-nodes`) **node commit SHAs** from `git ls-remote`. It does **not yet** rewrite floating HF `/resolve/main/` URLs to pinned `/resolve/<commit-sha>/` revision URLs. Consequently, `preflight --strict` will still flag floating HF refs as purity violations even after a successful lock run.
+`stack-lock.sh` supports `--pin-hf-rev` to automatically rewrite floating HF `/resolve/main/` (or `/resolve/master/`) URLs to pinned `/resolve/<full-40-hex-commit>/` revision URLs. It captures the exact commit SHA from HF's `X-Repo-Commit` response header on an authenticated HEAD request and rewrites the URL in place.
 
-The planned fix is to resolve the commit SHA via HF's `X-Repo-Commit` response header and rewrite the URL in place. Until that lands, suppress the warning by manually updating each `MODEL_MAP` URL to use the explicit commit revision.
+The canonical full-purity lock command is:
+
+```bash
+scripts/stack-lock.sh --write --pin-nodes --pin-hf-rev /path/to/stack
+scripts/preflight-stack.sh --strict /path/to/stack
+```
+
+After running both flags, `preflight --strict` is expected to exit 0. Only genuine T4 advisory coherence WARNs may remain (e.g. legitimately-manual models not in any MAP — declare those via `MANUAL_MODELS`).

@@ -12,21 +12,25 @@
 # --write to edit provisioner-config.sh in place (a .bak copy is kept).
 #
 # Usage:
-#   scripts/stack-lock.sh [--write] [--pin-nodes] [STACK_DIR]
+#   scripts/stack-lock.sh [--write] [--pin-nodes] [--pin-hf-rev] [STACK_DIR]
 #     STACK_DIR     stack repo root (default: cwd)
-#     --write       apply sha256 into MODEL_MAP (and pins if --pin-nodes)
+#     --write       apply changes to provisioner-config.sh (keeps a .bak)
 #     --pin-nodes   resolve empty NODE_MAP pins to current remote HEAD sha
+#     --pin-hf-rev  rewrite floating HF "/resolve/main/" (or master) URLs to a
+#                   pinned "/resolve/<commit>/" using HF's X-Repo-Commit header
+#                   — this is what makes preflight --strict fully green
 #
 # This is content-addressing (à la pip --hash / OCI digests): the sha256 lives
 # in the trusted, version-controlled stack repo and is recomputed on download.
 
 set -euo pipefail
 
-WRITE=0; PIN_NODES=0; STACK_DIR=""
+WRITE=0; PIN_NODES=0; PIN_HFREV=0; STACK_DIR=""
 while [ $# -gt 0 ]; do
   case "$1" in
-    --write)     WRITE=1 ;;
-    --pin-nodes) PIN_NODES=1 ;;
+    --write)      WRITE=1 ;;
+    --pin-nodes)  PIN_NODES=1 ;;
+    --pin-hf-rev) PIN_HFREV=1 ;;
     -h|--help)   grep '^#' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     -*)          echo "unknown flag: $1" >&2; exit 64 ;;
     *)           STACK_DIR="$1" ;;
@@ -47,23 +51,40 @@ host_of() { local u="${1#*://}"; printf '%s' "${u%%/*}"; }
 gh_authed() { case "$1" in https://github.com/*) printf 'https://x-access-token:%s@github.com/%s' "${GITHUB_TOKEN:-}" "${1#https://github.com/}";; *) printf '%s' "$1";; esac; }
 
 # tab-separated lock proposals consumed by the --write python pass
-LOCK_TSV="$(mktemp)"; PIN_TSV="$(mktemp)"
-trap 'rm -f "$LOCK_TSV" "$PIN_TSV"' EXIT
+LOCK_TSV="$(mktemp)"; PIN_TSV="$(mktemp)"; REV_TSV="$(mktemp)"
+trap 'rm -f "$LOCK_TSV" "$PIN_TSV" "$REV_TSV"' EXIT
 
 echo "== stack-lock: $(basename "$STACK_DIR") (dry-run$([ "$WRITE" = 1 ] && echo ' OFF — WRITING'))"
 
-echo "-- MODEL_MAP sha256 --"
+echo "-- MODEL_MAP provenance --"
 for e in "${MODEL_MAP[@]:-}"; do
   IFS='|' read -r rel url sha <<<"$e"
   [ -z "${rel:-}" ] && continue
-  if is_sha256 "${sha:-}"; then printf '  [have] %s\n' "$rel"; continue; fi
   case "$(host_of "$url")" in
     *huggingface.co)
-      etag="$(curl -sIL --max-time 30 -H "Authorization: Bearer $HF_TOKEN" "$url" 2>/dev/null \
-              | awk 'tolower($1)=="x-linked-etag:"{gsub(/[\r"]/,"",$2);print $2}' | tail -n1)"
-      if is_sha256 "${etag:-}"; then printf '  [lock] %s  sha256:%s\n' "$rel" "$etag"; printf '%s\t%s\n' "$rel" "$etag" >>"$LOCK_TSV"
-      else printf '  [miss] %s  (no sha256 etag from HF)\n' "$rel"; fi ;;
-    *) printf '  [skip] %s  (non-HF url; sha256 not auto-derivable)\n' "$rel" ;;
+      # one authed HEAD yields both the file sha256 (X-Linked-Etag) and the
+      # commit the floating ref resolved to (X-Repo-Commit).
+      hdrs="$(curl -sIL --max-time 30 -H "Authorization: Bearer $HF_TOKEN" "$url" 2>/dev/null || true)"
+      etag="$(printf '%s' "$hdrs"   | awk 'tolower($1)=="x-linked-etag:"{gsub(/[\r"]/,"",$2);print $2}' | tail -n1)"
+      commit="$(printf '%s' "$hdrs" | awk 'tolower($1)=="x-repo-commit:"{gsub(/[\r"]/,"",$2);print $2}' | tail -n1)"
+      # sha256
+      if is_sha256 "${sha:-}"; then printf '  [have] %s\n' "$rel"
+      elif is_sha256 "${etag:-}"; then printf '  [lock] %s  sha256:%s\n' "$rel" "$etag"; printf '%s\t%s\n' "$rel" "$etag" >>"$LOCK_TSV"
+      else printf '  [miss] %s  (no sha256 etag from HF)\n' "$rel"; fi
+      # revision pin (rewrite floating /resolve/main|master/ -> /resolve/<commit>/)
+      if [ "$PIN_HFREV" = 1 ]; then
+        case "$url" in
+          */resolve/main/*|*/resolve/master/*)
+            if [ "${#commit}" -eq 40 ] && is_hex "${commit:-}"; then
+              newurl="$(printf '%s' "$url" | sed -E "s#/resolve/(main|master)/#/resolve/${commit}/#")"
+              printf '  [rev ] %s  -> /resolve/%s/\n' "$rel" "${commit:0:12}"
+              printf '%s\t%s\n' "$rel" "$newurl" >>"$REV_TSV"
+            else printf '  [rev?] %s  (no X-Repo-Commit header; cannot pin revision)\n' "$rel"; fi ;;
+        esac
+      fi ;;
+    *)
+      if is_sha256 "${sha:-}"; then printf '  [have] %s\n' "$rel"
+      else printf '  [skip] %s  (non-HF url; sha256 not auto-derivable)\n' "$rel"; fi ;;
   esac
 done
 
@@ -80,17 +101,17 @@ if [ "$PIN_NODES" = 1 ]; then
   done
 fi
 
-nlock=$(wc -l <"$LOCK_TSV"); npin=$(wc -l <"$PIN_TSV")
-echo "-- proposed: ${nlock} model sha256, ${npin} node pin(s)"
+nlock=$(wc -l <"$LOCK_TSV"); npin=$(wc -l <"$PIN_TSV"); nrev=$(wc -l <"$REV_TSV")
+echo "-- proposed: ${nlock} model sha256, ${nrev} HF revision pin(s), ${npin} node pin(s)"
 
 if [ "$WRITE" != 1 ]; then
   echo "(dry-run — re-run with --write to apply)"
   exit 0
 fi
-[ "$nlock" -eq 0 ] && [ "$npin" -eq 0 ] && { echo "nothing to write"; exit 0; }
+[ "$nlock" -eq 0 ] && [ "$npin" -eq 0 ] && [ "$nrev" -eq 0 ] && { echo "nothing to write"; exit 0; }
 
 cp -p "$CFG" "$CFG.bak"
-LOCK_TSV="$LOCK_TSV" PIN_TSV="$PIN_TSV" python3 - "$CFG" <<'PY'
+LOCK_TSV="$LOCK_TSV" PIN_TSV="$PIN_TSV" REV_TSV="$REV_TSV" python3 - "$CFG" <<'PY'
 import os, re, sys
 cfg = sys.argv[1]
 def load(fn):
@@ -104,6 +125,7 @@ def load(fn):
     return m
 model_sha = load(os.environ["LOCK_TSV"])     # rel-path -> sha256
 node_pin  = load(os.environ["PIN_TSV"])      # folder   -> commit sha
+model_rev = load(os.environ["REV_TSV"])      # rel-path -> revision-pinned url
 
 with open(cfg) as fh:
     lines = fh.readlines()
@@ -123,6 +145,8 @@ for ln in lines:
         changed = False
         if block == 'MODEL_MAP' and len(fields) >= 2:
             rel = fields[0]
+            if rel in model_rev and fields[1] != model_rev[rel]:
+                fields[1] = model_rev[rel]; changed = True
             if rel in model_sha:
                 while len(fields) < 3: fields.append("")
                 if not re.fullmatch(r'[0-9a-fA-F]{64}', fields[2] or ""):
@@ -137,7 +161,7 @@ for ln in lines:
 
 with open(cfg, "w") as fh:
     fh.writelines(out)
-print(f"  wrote {len(model_sha)} model sha256 + {len(node_pin)} node pin(s) into {cfg}")
+print(f"  wrote {len(model_sha)} model sha256 + {len(model_rev)} HF revision pin(s) + {len(node_pin)} node pin(s) into {cfg}")
 print(f"  backup: {cfg}.bak")
 PY
 echo "Done. Re-run preflight-stack.sh --strict to confirm purity."

@@ -63,7 +63,7 @@ Common T0/T1 failures and fixes:
 ### Step 2 — Lock provenance (backfill sha256 + pin nodes)
 
 ```bash
-bash scripts/stack-lock.sh --write --pin-nodes "$STACK_DIR"
+bash scripts/stack-lock.sh --write --pin-nodes --pin-hf-rev "$STACK_DIR"
 ```
 
 This writes `provisioner-config.sh` in place (a `.bak` copy is kept automatically).
@@ -73,10 +73,9 @@ What it does:
   backfills the sha256 field. Upgrades T3 from "obtainable" to "recorded".
 - With `--pin-nodes`: for each `NODE_MAP` entry with an empty pin field: resolves the
   remote's current HEAD SHA and writes it. Upgrades T4 node-pin purity.
-
-**Known limitation:** `stack-lock` does not yet rewrite floating HF `/resolve/main/` refs
-to `/resolve/<commit>/`. After locking, `--strict` will still emit a T4 WARN for those
-refs. This is a known acceptable WARN — note it in the report and do not block on it.
+- With `--pin-hf-rev`: rewrites floating HF `/resolve/main/` (or `/resolve/master/`) refs
+  to `/resolve/<full-40-hex-commit>/` by reading HF's `X-Repo-Commit` response header.
+  Eliminates the floating-ref T4 purity violations under `--strict`.
 
 Non-HF model URLs (direct HTTP, Civitai) are skipped by the lock tool; sha256 for those
 must be recorded manually or via Civitai version metadata.
@@ -123,11 +122,12 @@ bash scripts/preflight-stack.sh --strict "$STACK_DIR"
 ```
 
 Review the output:
-- Any remaining `[FAIL]` that is NOT the known HF floating-ref limitation must be resolved.
-- The floating HF `/resolve/main/` → `/resolve/<commit>/` rewrite is not yet automated
-  — note each occurrence as a remediation backlog item and do NOT block the verdict on it.
-- All other T4 purity issues promoted to FAIL under `--strict` must be addressed before
-  declaring the stack READY.
+- Any remaining `[FAIL]` must be resolved before declaring READY.
+- All T4 purity issues promoted to FAIL under `--strict` must be addressed before
+  declaring the stack READY (floating HF refs are now resolved by `--pin-hf-rev`; if any
+  remain they indicate a URL that was missed or added after locking — re-run lock).
+- Genuine T4 advisory WARNs about legitimately-manual/missing models are acceptable;
+  declare those via `MANUAL_MODELS`.
 
 ### Step 5 — Final verdict
 
@@ -135,8 +135,9 @@ Issue one of the following verdicts:
 
 **READY**
 > Stack `<name>` passed T0–T3 correctness and all T4 purity issues are resolved or
-> accounted for. Pinning: `<N>` model sha256 recorded, `<N>` node commits pinned.
-> Known limitation: `<N>` floating HF refs pending upstream fix to stack-lock.
+> accounted for. Pinning: `<N>` model sha256 recorded, `<N>` node commits pinned,
+> `<N>` HF revision URLs pinned. Any residual T4 WARNs are genuine advisory items
+> (manual models declared in MANUAL_MODELS).
 
 **NEEDS-FETCH**
 > Stack `<name>` is composable and all correctness gates pass. `<N>` model(s) not yet

@@ -76,7 +76,7 @@ MODEL_MAP=(
 ```
 
 **Purity rules:**
-- Use a commit revision (`/resolve/<sha>/`) rather than `/resolve/main/`. Run `stack-lock.sh` to get the sha256 from `X-Linked-Etag`, then update the URL manually to pin the revision. (Automatic URL rewriting is planned but not yet implemented — see [known limitation](PREFLIGHT.md#known-limitation-hf-floating-refs).)
+- Use a commit revision (`/resolve/<sha>/`) rather than `/resolve/main/`. Run `stack-lock.sh --write --pin-hf-rev` to automatically rewrite floating refs to pinned revision URLs using HF's `X-Repo-Commit` response header. See [pinning HF floating refs](PREFLIGHT.md#pinning-hf-floating-refs-with---pin-hf-rev).
 - Fill the sha256 field. If left empty, preflight can obtain it from HF's `X-Linked-Etag` but it is not recorded. Run `stack-lock.sh --write` to persist it.
 
 ### `MODEL_MAP_CIVITAI` — Civitai models
@@ -135,7 +135,7 @@ Entries in `MANUAL_MODELS` are treated by preflight T4 as "known" — workflow r
 ```
 1. Write provisioner-config.sh + comfyui/ workflows
 2. scripts/preflight-stack.sh /path/to/stack          # must exit 0 or 2
-3. scripts/stack-lock.sh --write --pin-nodes /path/to/stack
+3. scripts/stack-lock.sh --write --pin-nodes --pin-hf-rev /path/to/stack
 4. scripts/preflight-stack.sh --strict /path/to/stack  # target: exit 0
 5. Commit provisioner-config.sh (now with sha256 + pins recorded)
 ```
@@ -168,7 +168,7 @@ The goal is a fully reproducible stack: the same `provisioner-config.sh` always 
 | HF models | Commit-pinned `/resolve/<sha>/` URL + recorded sha256 in field 3 of `MODEL_MAP` |
 | Civitai models | Versioned `/api/download/models/<version-id>` URL + sha256 in field 3 |
 
-Running `stack-lock.sh --write --pin-nodes` gets you most of the way there. The remaining gap (HF URL revision pinning) requires a manual URL update until the automatic rewrite is implemented.
+Running `stack-lock.sh --write --pin-nodes --pin-hf-rev` achieves full pinning purity: sha256 backfill, node commit pinning, and HF revision URL rewriting in one step.
 
 ---
 
@@ -190,9 +190,15 @@ Some custom nodes (including `ComfyUI-LTXVideo`) store large binary assets in gi
 
 Do not test Civitai URL reachability with a plain `curl -I`. Civitai's R2 presigned URLs reject HEAD with `403 Forbidden` but correctly return `206 Partial Content` for range GETs. Preflight handles this correctly; if you are writing your own tooling, use `curl -r 0-0` with the `Authorization` header.
 
-### Floating HF refs survive stack-lock
+### Floating HF refs: use `--pin-hf-rev` to resolve
 
-`stack-lock.sh --write` records the sha256 for each model but does **not** rewrite `/resolve/main/` URLs to pinned revision URLs. After locking, preflight `--strict` will still flag floating refs. Fix them manually by updating the URL to use the explicit commit sha obtained from HF's `X-Repo-Commit` response header. Automatic rewriting is planned.
+`stack-lock.sh --write` alone records the sha256 for each model but does not rewrite `/resolve/main/` URLs. Pass `--pin-hf-rev` to also rewrite floating refs: the tool performs an authenticated HEAD on each HF URL, reads the `X-Repo-Commit` response header, and rewrites the URL in place to the pinned `/resolve/<commit>/` form. The canonical full-purity lock command is:
+
+```bash
+scripts/stack-lock.sh --write --pin-nodes --pin-hf-rev /path/to/stack
+```
+
+After locking with `--pin-hf-rev`, `preflight --strict` should exit 0 with no floating-ref FAILs.
 
 ### Inline credentials in provisioner-config.sh
 
