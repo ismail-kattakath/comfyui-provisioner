@@ -32,7 +32,11 @@
       "mcp__runpod__*",
       "PushNotification",
       "Agent(vastai-stack-deployer)",
-      "Agent(vastai-stack-verifier)"
+      "Agent(vastai-stack-verifier)",
+      "Bash(bash scripts/preflight-stack.sh*)",
+      "Bash(bash scripts/stack-lock.sh*)",
+      "Agent(stack-preflight)",
+      "Agent(stack-groomer)"
     ],
     "deny": [],
     "defaultMode": "default"
@@ -46,17 +50,6 @@
             "type": "command",
             "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/load-env.sh\"",
             "timeout": 10
-          }
-        ]
-      }
-    ],
-    "Stop": [
-      {
-        "matcher": "*",
-        "hooks": [
-          {
-            "type": "prompt",
-            "prompt": "Decide whether to block or approve Claude stopping. The DEFAULT is approve — only return 'block' if you have clear, affirmative evidence in the transcript of specific work Claude can complete RIGHT NOW in this same turn without user input (e.g. a file Claude said it would write but hasn't, a command Claude said it would run but hasn't). Insufficient transcript evidence is NOT a reason to block — it is a reason to approve. Approve immediately if any of these apply: (1) remaining steps require user credentials, tokens, or external values; (2) Claude explicitly asked the user a question and is waiting for their reply; (3) Claude clearly communicated next steps as user-action items; (4) Claude launched background subagents and is waiting for completion notifications — the notification re-invocation mechanism requires the current turn to end, so blocking here deadlocks the workflow; (5) you cannot determine with confidence what unfinished work exists. Return 'block' only with a specific, quoted piece of evidence showing work Claude can finish right now."
           }
         ]
       }
@@ -118,18 +111,6 @@
           {
             "type": "command",
             "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/enforce-delegation.sh\"",
-            "timeout": 5
-          }
-        ]
-      }
-    ],
-    "UserPromptSubmit": [
-      {
-        "matcher": "*",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/tool-routing.sh\"",
             "timeout": 5
           }
         ]
@@ -198,7 +179,7 @@
         "hooks": [
           {
             "type": "prompt",
-            "prompt": "A task is being marked complete. Apply these quality gates:\n\n1. If the task name contains 'deploy': BLOCK unless an instance ID is recorded and actual_status was confirmed as 'running' via the JSON API. Respond 'block: deploy tasks require instance ID + running status confirmation'.\n\n2. If the task name contains 'verify': BLOCK unless an explicit PASS or FAIL verdict with specific evidence (nodes present, workflow JSON staged, ComfyUI HTTP 200) was reported. A timeout or connection refusal counts as FAIL, not PASS. Respond 'block: verify tasks require explicit PASS or FAIL with evidence'.\n\n3. If the task name contains 'audit': BLOCK unless specific findings are recorded — either 'all expected nodes present' or a named list of missing nodes. 'investigated' or 'checked' without specifics does not count. Respond 'block: audit tasks require specific node findings'.\n\n4. All other tasks: approve."
+            "prompt": "A task is being marked complete. Apply these quality gates:\n\n1. If the task name contains 'deploy': BLOCK unless an instance ID is recorded and actual_status was confirmed as 'running' via the JSON API. Respond 'block: deploy tasks require instance ID + running status confirmation'.\n\n2. If the task name contains 'verify': BLOCK unless an explicit PASS or FAIL verdict with specific evidence (nodes present, workflow JSON staged, ComfyUI HTTP 200) was reported. A timeout or connection refusal counts as FAIL, not PASS. Respond 'block: verify tasks require explicit PASS or FAIL with evidence'.\n\n3. If the task name contains 'audit': BLOCK unless specific findings are recorded \u2014 either 'all expected nodes present' or a named list of missing nodes. 'investigated' or 'checked' without specifics does not count. Respond 'block: audit tasks require specific node findings'.\n\n4. All other tasks: approve."
           }
         ]
       }
@@ -209,7 +190,7 @@
         "hooks": [
           {
             "type": "prompt",
-            "prompt": "A task is being created. It must meet both standards:\n\n1. Name must be verb-noun kebab-case (e.g. 'deploy-bfs-stack', 'verify-likeness-i2v', 'audit-mrxin-deps'). Single-word names or names without a verb are not acceptable.\n\n2. The description must state what 'done' looks like — an explicit acceptance criterion, not just a description of what the work involves.\n\nIf either is missing, respond 'block: <what needs to be added>'. If both are met, respond 'approve'."
+            "prompt": "A task is being created. It must meet both standards:\n\n1. Name must be verb-noun kebab-case (e.g. 'deploy-bfs-stack', 'verify-likeness-i2v', 'audit-mrxin-deps'). Single-word names or names without a verb are not acceptable.\n\n2. The description must state what 'done' looks like \u2014 an explicit acceptance criterion, not just a description of what the work involves.\n\nIf either is missing, respond 'block: <what needs to be added>'. If both are met, respond 'approve'."
           }
         ]
       }

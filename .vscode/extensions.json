@@ -3,6 +3,8 @@
         "piiq.code-comfyui",
         "fuadpashayev.bottom-terminal",
         "anthropic.claude-code",
-        "mkhl.direnv"
+        "ms-azuretools.vscode-containers",
+        "mkhl.direnv",
+        "shd101wyy.markdown-preview-enhanced"
     ]
 }

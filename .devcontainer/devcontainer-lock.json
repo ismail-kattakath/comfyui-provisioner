@@ -1,24 +1,24 @@
 {
   "features": {
-    "ghcr.io/devcontainer-community/devcontainer-features/dotenv.org:1": {
-      "version": "1.0.2",
-      "resolved": "ghcr.io/devcontainer-community/devcontainer-features/dotenv.org@sha256:0edf5ea210e00828a38cd41bdf4743f34e891e23473b7a779230834540469567",
-      "integrity": "sha256:0edf5ea210e00828a38cd41bdf4743f34e891e23473b7a779230834540469567"
-    },
-    "ghcr.io/devcontainers-extra/features/claude-code:2": {
-      "version": "2.0.0",
-      "resolved": "ghcr.io/devcontainers-extra/features/claude-code@sha256:37b0d444a704021ee5f6d24242a4621bf337867d110e4e3c06b863a3a78122ac",
-      "integrity": "sha256:37b0d444a704021ee5f6d24242a4621bf337867d110e4e3c06b863a3a78122ac"
-    },
-    "ghcr.io/devcontainers-extra/features/uv:1": {
-      "version": "1.0.2",
-      "resolved": "ghcr.io/devcontainers-extra/features/uv@sha256:1ac5b9f17a9e9e745933d0ac2ecf758e06ed3da4423cd22c94cce4d482fd2dd8",
-      "integrity": "sha256:1ac5b9f17a9e9e745933d0ac2ecf758e06ed3da4423cd22c94cce4d482fd2dd8"
+    "ghcr.io/anthropics/devcontainer-features/claude-code:1": {
+      "version": "1.0.5",
+      "resolved": "ghcr.io/anthropics/devcontainer-features/claude-code@sha256:cfc2e7d3e9fd3b9b01f8d5cb158508a884c8c0ede2e23ed10f32dea5d4ffe69a",
+      "integrity": "sha256:cfc2e7d3e9fd3b9b01f8d5cb158508a884c8c0ede2e23ed10f32dea5d4ffe69a"
     },
     "ghcr.io/devcontainers/features/github-cli:1": {
       "version": "1.1.0",
       "resolved": "ghcr.io/devcontainers/features/github-cli@sha256:d22f50b70ed75339b4eed1ba9ecde3a1791f90e88d37936517e3bace0bbad671",
       "integrity": "sha256:d22f50b70ed75339b4eed1ba9ecde3a1791f90e88d37936517e3bace0bbad671"
+    },
+    "ghcr.io/devcontainers/features/node:2": {
+      "version": "2.0.0",
+      "resolved": "ghcr.io/devcontainers/features/node@sha256:fedd4c11f7adfb64283b578dddc7da906728daa25fa293351c9d913231acf12f",
+      "integrity": "sha256:fedd4c11f7adfb64283b578dddc7da906728daa25fa293351c9d913231acf12f"
+    },
+    "ghcr.io/devcontainers/features/python:1": {
+      "version": "1.8.0",
+      "resolved": "ghcr.io/devcontainers/features/python@sha256:fbcad6955caeecc5ad3f7886baf652e25cba5225a6c4c2287c536de2e5607511",
+      "integrity": "sha256:fbcad6955caeecc5ad3f7886baf652e25cba5225a6c4c2287c536de2e5607511"
     },
     "ghcr.io/esimkowitz/devcontainer-features/direnv:1": {
       "version": "1.0.1",
