@@ -1,23 +1,28 @@
 {
   "name": "comfyui-provisioner",
-  "image": "mcr.microsoft.com/devcontainers/base:ubuntu",
-  "features": {
-    "ghcr.io/devcontainers/features/python:1": {
-      "toolsToInstall": "comfy-cli"
-    },
-    "ghcr.io/devcontainers/features/node:2": {},
-    "ghcr.io/devcontainers/features/github-cli:1": {},
-    "ghcr.io/esimkowitz/devcontainer-features/direnv:1": {},
-    "ghcr.io/anthropics/devcontainer-features/claude-code:1": {}
-  },
-  "workspaceMount": "source=${localWorkspaceFolder}/..,target=/workspaces,type=bind",
-  "workspaceFolder": "/workspaces/comfyui-provisioning",
-  "mounts": [
-    "source=${localEnv:HOME}/.claude,target=/home/vscode/.claude,type=bind",
-    "source=${localEnv:HOME}/.config/gh,target=/home/vscode/.config/gh,type=bind"
+  "dockerComposeFile": [
+    "docker-compose.yml"
   ],
-  "postCreateCommand": "comfy --skip-prompt install --cpu",
-  "postAttachCommand": "direnv allow .",
+  "service": "devcontainer",
+  "workspaceFolder": "/workspaces/comfyui-provisioner",
+  "features": {
+    "ghcr.io/devcontainers/features/python:1": {},
+    "ghcr.io/devcontainers/features/node:2": {},
+    "ghcr.io/esimkowitz/devcontainer-features/direnv:1": {},
+    "ghcr.io/anthropics/devcontainer-features/claude-code:1": {},
+    "ghcr.io/devcontainer-community/devcontainer-features/dotenv.org:1": {},
+    "ghcr.io/devcontainers/features/github-cli:1": {}
+  },
+  "postCreateCommand": {
+    "prepare-comfy-workspace": "sudo chown vscode:vscode /comfy",
+    "authorize-env": "direnv allow",
+    "install-comfy-cli": "pip install --user --upgrade comfy-cli",
+    "install-runpod-cli": "mkdir -p $HOME/.local/bin && wget --quiet https://github.com/runpod/runpodctl/releases/latest/download/runpodctl-linux-amd64 -O $HOME/.local/bin/runpodctl && chmod +x $HOME/.local/bin/runpodctl",
+    "install-vastai-cli": "pip install --user --upgrade vastai"
+  },
+  "postAttachCommand": {
+    "sanitize-env": "direnv reload"
+  },
   "forwardPorts": [
     8188
   ],
@@ -28,9 +33,19 @@
         "fuadpashayev.bottom-terminal",
         "anthropic.claude-code",
         "mkhl.direnv",
+        "SeptWong.vscode-webstorm-theme",
         "ms-azuretools.vscode-containers",
         "shd101wyy.markdown-preview-enhanced"
-      ]
+      ],
+      "settings": {
+        "workbench.colorTheme": "WebStorm Darker",
+        "terminal.integrated.defaultProfile.linux": "zsh",
+        "terminal.integrated.profiles.linux": {
+          "zsh": {
+            "path": "/bin/zsh"
+          }
+        }
+      }
     }
   }
 }

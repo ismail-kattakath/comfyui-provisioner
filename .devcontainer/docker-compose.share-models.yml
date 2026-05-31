@@ -1,0 +1,20 @@
+# Host-reuse mode: SHARE-MODELS (recommended way to reuse host assets)
+#
+# Mounts ONLY your host machine's ComfyUI models/ directory (read-write) into the
+# container's ComfyUI root, so multi-GB model downloads are reused. custom_nodes,
+# workflows, and the Python venv stay isolated in the container's named volume —
+# so provisioning never renames or clobbers the rest of your host install.
+#
+# Enable:
+#   1. Set HOST_MODELS_DIR to your host ComfyUI models directory (the dir that
+#      contains checkpoints/, loras/, vae/, ...), e.g. in .env or your shell:
+#        HOST_MODELS_DIR=/Users/you/comfyui/models
+#   2. Add this file to "dockerComposeFile" in devcontainer.json (see the block there).
+#   3. Rebuild the container.
+#
+# HOST_MODELS_DIR is referenced with ${VAR:?...} so Compose fails loudly if it is
+# unset or empty — an empty value would otherwise bind the container root ("/").
+services:
+  devcontainer:
+    volumes:
+      - ${HOST_MODELS_DIR:?set HOST_MODELS_DIR to your host ComfyUI models directory}:/comfy/ComfyUI/models

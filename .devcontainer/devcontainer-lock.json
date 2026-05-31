@@ -5,6 +5,11 @@
       "resolved": "ghcr.io/anthropics/devcontainer-features/claude-code@sha256:cfc2e7d3e9fd3b9b01f8d5cb158508a884c8c0ede2e23ed10f32dea5d4ffe69a",
       "integrity": "sha256:cfc2e7d3e9fd3b9b01f8d5cb158508a884c8c0ede2e23ed10f32dea5d4ffe69a"
     },
+    "ghcr.io/devcontainer-community/devcontainer-features/dotenv.org:1": {
+      "version": "1.0.2",
+      "resolved": "ghcr.io/devcontainer-community/devcontainer-features/dotenv.org@sha256:0edf5ea210e00828a38cd41bdf4743f34e891e23473b7a779230834540469567",
+      "integrity": "sha256:0edf5ea210e00828a38cd41bdf4743f34e891e23473b7a779230834540469567"
+    },
     "ghcr.io/devcontainers/features/github-cli:1": {
       "version": "1.1.0",
       "resolved": "ghcr.io/devcontainers/features/github-cli@sha256:d22f50b70ed75339b4eed1ba9ecde3a1791f90e88d37936517e3bace0bbad671",
