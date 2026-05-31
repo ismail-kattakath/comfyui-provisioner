@@ -1,22 +1,27 @@
 {
   "name": "comfyui-provisioner",
-  "image": "mcr.microsoft.com/devcontainers/base:ubuntu",
+  "dockerComposeFile": [
+    "docker-compose.yml"
+  ],
+  "service": "devcontainer",
+  "workspaceFolder": "/workspaces/comfyui-provisioner",
   "features": {
-    "ghcr.io/devcontainers-extra/features/uv:1": {},
+    "ghcr.io/devcontainers/features/python:1": {},
+    "ghcr.io/devcontainers/features/node:2": {},
     "ghcr.io/esimkowitz/devcontainer-features/direnv:1": {},
     "ghcr.io/devcontainers-extra/features/claude-code:2": {},
     "ghcr.io/devcontainer-community/devcontainer-features/dotenv.org:1": {},
     "ghcr.io/devcontainers/features/github-cli:1": {}
   },
-  "workspaceMount": "source=${localWorkspaceFolder}/..,target=/workspaces,type=bind",
-  "workspaceFolder": "/workspaces/comfyui-provisioning",
-  "mounts": [
-    "source=${localEnv:HOME}/.claude,target=/home/vscode/.claude,type=bind",
-    "source=${localEnv:HOME}/.config/gh,target=/home/vscode/.config/gh,type=bind"
-  ],
   "postCreateCommand": {
-    "direnv": "direnv allow .",
-    "comfy": "pip install comfy-cli && comfy --install-completion && comfy install --cpu"
+    "prepare-comfy-workspace": "sudo chown vscode:vscode /comfy",
+    "authorize-env": "direnv allow",
+    "install-comfy-cli": "pip install --user --upgrade comfy-cli",
+    "install-runpod-cli": "mkdir -p $HOME/.local/bin && wget --quiet https://github.com/runpod/runpodctl/releases/latest/download/runpodctl-linux-amd64 -O $HOME/.local/bin/runpodctl && chmod +x $HOME/.local/bin/runpodctl",
+    "install-vastai-cli": "pip install --user --upgrade vastai"
+  },
+  "postAttachCommand": {
+    "sanitize-env": "direnv reload"
   },
   "forwardPorts": [
     8188
@@ -25,13 +30,13 @@
     "vscode": {
       "extensions": [
         "piiq.code-comfyui",
-        "akamud.vscode-theme-onedark",
         "fuadpashayev.bottom-terminal",
         "Anthropic.claude-code",
-        "mkhl.direnv"
+        "mkhl.direnv",
+        "SeptWong.vscode-webstorm-theme"
       ],
       "settings": {
-        "workbench.colorTheme": "Atom One Dark",
+        "workbench.colorTheme": "WebStorm Darker",
         "terminal.integrated.defaultProfile.linux": "zsh",
         "terminal.integrated.profiles.linux": {
           "zsh": {

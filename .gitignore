@@ -24,3 +24,9 @@ provision.pid
 
 # Claude Code plugin local config files
 *.local.md
+
+# Personal devcontainer stack mounts (private repos, never commit)
+.devcontainer/docker-compose.override.yml
+
+# stray runpodctl download artifact (now installed to ~/.local/bin)
+runpodctl

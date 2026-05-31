@@ -1,0 +1,22 @@
+# Host-reuse mode: FULL-REUSE  ⚠️  mutates your real host ComfyUI install
+#
+# Mounts your ENTIRE host ComfyUI directory (read-write) as the container's ComfyUI
+# root. The provisioner WILL write to it: it clones custom nodes, downloads multi-GB
+# models, stages workflows, and ALIAS_MAP RENAMES custom_nodes/ folders — which can
+# break workflows in your host install that reference the old folder names.
+#
+# Use only if you accept those writes to your host. If you just want to avoid
+# re-downloading models, prefer docker-compose.share-models.yml instead.
+#
+# Enable:
+#   1. Set HOST_COMFYUI_DIR to your host ComfyUI root (the dir containing main.py), e.g.:
+#        HOST_COMFYUI_DIR=/Users/you/comfyui
+#   2. Add this file to "dockerComposeFile" in devcontainer.json (see the block there).
+#   3. Rebuild the container.
+#
+# HOST_COMFYUI_DIR is referenced with ${VAR:?...} so Compose fails loudly if it is
+# unset or empty — an empty value would otherwise bind the container root ("/").
+services:
+  devcontainer:
+    volumes:
+      - ${HOST_COMFYUI_DIR:?set HOST_COMFYUI_DIR to your host ComfyUI root (dir containing main.py)}:/comfy/ComfyUI

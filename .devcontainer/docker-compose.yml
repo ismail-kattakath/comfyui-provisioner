@@ -1,0 +1,25 @@
+services:
+  devcontainer:
+    image: mcr.microsoft.com/devcontainers/base:ubuntu
+    environment:
+      # ComfyUI lives under this workspace. providers/local/launch.sh installs it at
+      # $COMFY_WORKSPACE/ComfyUI (comfy-cli nests ComfyUI/ under the workspace), so the
+      # ComfyUI root inside the container is /comfy/ComfyUI. Backed by the named volume
+      # below — the isolated default leaves the host machine untouched.
+      COMFY_WORKSPACE: /comfy
+      # The base image ships Python as an externally-managed environment (PEP 668),
+      # so plain `pip install --user` is refused. This lets pip proceed; installs
+      # still go to the user site via --user. Also covers launch.sh's comfy-cli
+      # bootstrap so the same error can't resurface there.
+      PIP_BREAK_SYSTEM_PACKAGES: "1"
+    volumes:
+      - ..:/workspaces/comfyui-provisioner:cached
+      - ${HOME}/.claude:/home/vscode/.claude:cached
+      - ${HOME}/.config/gh:/home/vscode/.config/gh:cached
+      - comfyui_data:/comfy
+    command: sleep infinity
+
+volumes:
+  # Container-owned ComfyUI storage. Persists across container rebuilds; host untouched.
+  # Host-reuse modes overlay a bind mount on top of this (see docker-compose.*.yml).
+  comfyui_data:
