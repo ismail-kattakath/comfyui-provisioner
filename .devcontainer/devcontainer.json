@@ -9,7 +9,7 @@
     "ghcr.io/devcontainers/features/python:1": {},
     "ghcr.io/devcontainers/features/node:2": {},
     "ghcr.io/esimkowitz/devcontainer-features/direnv:1": {},
-    "ghcr.io/devcontainers-extra/features/claude-code:2": {},
+    "ghcr.io/anthropics/devcontainer-features/claude-code:1": {},
     "ghcr.io/devcontainer-community/devcontainer-features/dotenv.org:1": {},
     "ghcr.io/devcontainers/features/github-cli:1": {}
   },
@@ -31,9 +31,11 @@
       "extensions": [
         "piiq.code-comfyui",
         "fuadpashayev.bottom-terminal",
-        "Anthropic.claude-code",
+        "anthropic.claude-code",
         "mkhl.direnv",
-        "SeptWong.vscode-webstorm-theme"
+        "SeptWong.vscode-webstorm-theme",
+        "ms-azuretools.vscode-containers",
+        "shd101wyy.markdown-preview-enhanced"
       ],
       "settings": {
         "workbench.colorTheme": "WebStorm Darker",

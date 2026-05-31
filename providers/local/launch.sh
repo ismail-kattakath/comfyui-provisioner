@@ -72,14 +72,25 @@ if [ -n "${COMFYUI_DIR:-}" ]; then
     exit 1
   fi
 else
-  # No explicit path: prefer a known existing install before installing fresh.
-  for cand in "$HOME/comfy/ComfyUI" "$HOME/comfyui"; do
-    if is_comfy_install "$cand"; then
-      COMFYUI_DIR="$cand"
-      log "Found existing ComfyUI at $COMFYUI_DIR"
-      break
+  # No explicit path: try comfy-cli's tracked workspace first, then well-known
+  # candidate paths, then auto-install.
+  if command -v comfy >/dev/null 2>&1; then
+    detected="$(comfy which 2>/dev/null | sed -n 's/^Target ComfyUI path: //p' | tail -n1)"
+    if is_comfy_install "$detected"; then
+      COMFYUI_DIR="$detected"
+      log "Resolved ComfyUI via 'comfy which' -> $COMFYUI_DIR"
     fi
-  done
+  fi
+
+  if [ -z "${COMFYUI_DIR:-}" ]; then
+    for cand in "$HOME/comfy/ComfyUI" "$HOME/comfyui"; do
+      if is_comfy_install "$cand"; then
+        COMFYUI_DIR="$cand"
+        log "Found existing ComfyUI at $COMFYUI_DIR"
+        break
+      fi
+    done
+  fi
 
   if [ -z "${COMFYUI_DIR:-}" ]; then
     if [ "${COMFY_NO_AUTO_INSTALL:-0}" = "1" ]; then
