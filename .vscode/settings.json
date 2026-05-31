@@ -1,4 +1,6 @@
 {
   "python.terminal.useEnvFile": true,
-  "python.envFile": "${workspaceFolder}/.env"
+  "python.envFile": "${workspaceFolder}/.env",
+  "markdown-preview-enhanced.previewMode": "Previews Only",
+  "markdown-preview-enhanced.previewColorScheme": "editorColorScheme"
 }

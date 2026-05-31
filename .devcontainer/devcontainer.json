@@ -2,11 +2,13 @@
   "name": "comfyui-provisioner",
   "image": "mcr.microsoft.com/devcontainers/base:ubuntu",
   "features": {
-    "ghcr.io/devcontainers-extra/features/uv:1": {},
+    "ghcr.io/devcontainers/features/python:1": {
+      "toolsToInstall": "comfy-cli"
+    },
+    "ghcr.io/devcontainers/features/node:2": {},
+    "ghcr.io/devcontainers/features/github-cli:1": {},
     "ghcr.io/esimkowitz/devcontainer-features/direnv:1": {},
-    "ghcr.io/devcontainers-extra/features/claude-code:2": {},
-    "ghcr.io/devcontainer-community/devcontainer-features/dotenv.org:1": {},
-    "ghcr.io/devcontainers/features/github-cli:1": {}
+    "ghcr.io/anthropics/devcontainer-features/claude-code:1": {}
   },
   "workspaceMount": "source=${localWorkspaceFolder}/..,target=/workspaces,type=bind",
   "workspaceFolder": "/workspaces/comfyui-provisioning",
@@ -14,10 +16,8 @@
     "source=${localEnv:HOME}/.claude,target=/home/vscode/.claude,type=bind",
     "source=${localEnv:HOME}/.config/gh,target=/home/vscode/.config/gh,type=bind"
   ],
-  "postCreateCommand": {
-    "direnv": "direnv allow .",
-    "comfy": "pip install comfy-cli && comfy --install-completion && comfy install --cpu"
-  },
+  "postCreateCommand": "comfy --skip-prompt install --cpu",
+  "postAttachCommand": "direnv allow .",
   "forwardPorts": [
     8188
   ],
@@ -25,20 +25,12 @@
     "vscode": {
       "extensions": [
         "piiq.code-comfyui",
-        "akamud.vscode-theme-onedark",
         "fuadpashayev.bottom-terminal",
-        "Anthropic.claude-code",
-        "mkhl.direnv"
-      ],
-      "settings": {
-        "workbench.colorTheme": "Atom One Dark",
-        "terminal.integrated.defaultProfile.linux": "zsh",
-        "terminal.integrated.profiles.linux": {
-          "zsh": {
-            "path": "/bin/zsh"
-          }
-        }
-      }
+        "anthropic.claude-code",
+        "mkhl.direnv",
+        "ms-azuretools.vscode-containers",
+        "shd101wyy.markdown-preview-enhanced"
+      ]
     }
   }
 }
