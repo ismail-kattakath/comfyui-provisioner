@@ -320,6 +320,13 @@ bash "$PROVISIONER_DIR/scripts/provision-comfyui.sh"
 # via the PROVISIONER_PORTAL_CONFIG env var (which avoids the --env
 # word-split because we set PORTAL_CONFIG inside this script, not via
 # the CLI).
+#
+# WARNING: the vastai CLI silently strips PORTAL_CONFIG entries sharing
+# the same `localhost:<port>` prefix — only the first survives. The default
+# below reuses localhost:8080 for both Jupyter sub-entries; that's safe
+# here because this script sets PORTAL_CONFIG inside the container (no CLI
+# parse), but anyone passing PROVISIONER_PORTAL_CONFIG via `--env` from the
+# CLI should give each entry a unique localhost port to avoid the strip.
 DEFAULT_PORTAL_CONFIG="localhost:1111:11111:/:Instance Portal|localhost:8188:18188:/:ComfyUI|localhost:8288:18288:/docs:API Wrapper|localhost:8080:18080:/:Jupyter|localhost:8080:8080:/terminals/1:Jupyter Terminal|localhost:8384:18384:/:Syncthing"
 export PORTAL_CONFIG="${PROVISIONER_PORTAL_CONFIG:-$DEFAULT_PORTAL_CONFIG}"
 echo "[onstart] PORTAL_CONFIG set (${#PORTAL_CONFIG} chars, $(echo "$PORTAL_CONFIG" | tr -cd '|' | wc -c) app separators)"

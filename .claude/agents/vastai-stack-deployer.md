@@ -45,6 +45,8 @@ for o in offers[:5]:
 
 ## Step 2 — Create the instance
 
+> ⚠️ vast.ai's CLI silently strips PORTAL_CONFIG entries that share the same `localhost:<port>` prefix — only the first such entry survives. The web UI doesn't have this issue. The `PORTAL` value below contains two `localhost:8080` entries (Jupyter + Jupyter Terminal) and will lose one when launched via CLI. If you need all entries to land, give each a unique localhost port (e.g. proxy Jupyter Terminal via `localhost:8081` instead of reusing `localhost:8080`).
+
 ```bash
 PORTAL='localhost:1111:11111:/:Instance Portal|localhost:8188:18188:/:ComfyUI|localhost:8288:18288:/docs:API Wrapper|localhost:8080:18080:/:Jupyter|localhost:8080:8080:/terminals/1:Jupyter Terminal|localhost:8384:18384:/:Syncthing'
 
