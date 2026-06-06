@@ -271,6 +271,9 @@ fi
     printf "export SYNCTHING_LOGS_FOLDER_ID=%q\n" "${SYNCTHING_LOGS_FOLDER_ID:-}"
     printf "export SYNCTHING_LOGS_LABEL=%q\n"     "${SYNCTHING_LOGS_LABEL:-}"
     printf "export COMFYUI_LOG_LEVEL=%q\n"        "${COMFYUI_LOG_LEVEL:-}"
+    # Written by the /etc/environment block below; persisted here so SSH
+    # reprovision sessions (source .provisioner.env) also export it.
+    printf "export COMFYUI_API_BASE=%q\n"         "http://127.0.0.1:18188"
   } > /workspace/.provisioner.env
 )
 chmod 600 /workspace/.provisioner.env
@@ -361,6 +364,30 @@ else:
     txt = txt.rstrip() + ("\n" if txt else "") + new_line
 open(path, "w").write(txt)
 print(f"[onstart] /etc/environment now has correct PORTAL_CONFIG ({len(val)} chars)")
+'
+
+# Persist COMFYUI_API_BASE to /etc/environment so the comfyui-api-wrapper
+# (launched by supervisord, which sources /etc/environment via
+# /opt/supervisor-scripts/utils/environment.sh) hits ComfyUI's real port.
+# Port 8188 is a Caddy auth-proxy that returns 401; ComfyUI itself listens
+# on 18188 (set in COMFYUI_ARGS="--disable-auto-launch --port 18188 ...").
+python3 -c '
+import os, re
+path = "/etc/environment"
+key = "COMFYUI_API_BASE"
+val = "http://127.0.0.1:18188"
+try:
+    txt = open(path).read()
+except FileNotFoundError:
+    txt = ""
+new_line = f"{key}=\"{val}\"\n"
+if re.search(rf"^{key}=", txt, flags=re.M):
+    # Already present — leave it (idempotent: do not overwrite a user override)
+    print(f"[onstart] /etc/environment already has {key} — skipping")
+else:
+    txt = txt.rstrip() + ("\n" if txt else "") + new_line
+    open(path, "w").write(txt)
+    print(f"[onstart] /etc/environment: added {key}={val}")
 '
 
 # Now remove stale /etc/portal.yaml + /etc/Caddyfile and restart the

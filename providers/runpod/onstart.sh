@@ -123,6 +123,14 @@ echo "[onstart] WORKFLOWS_SRC_DIR=$WORKFLOWS_SRC_DIR"
 export HUGGINGFACE_TOKEN="${HF_TOKEN}"
 export HUGGINGFACE_API_KEY="${HF_TOKEN}"
 
+# 4c. Point the comfyui-api-wrapper (if present in this image) at ComfyUI's
+#     real port. Port 8188 is RunPod's public proxy entry point; ComfyUI
+#     itself listens on 8188 here (no Caddy layer on RunPod), so the default
+#     of http://127.0.0.1:8188 is correct for RunPod. We set it explicitly
+#     so reprovision sessions and any wrapper process inherit the right value,
+#     and so the var is present in .provisioner.env for consistency with VastAI.
+export COMFYUI_API_BASE="${COMFYUI_API_BASE:-http://127.0.0.1:8188}"
+
 # 5. Persist tokens + config to /workspace/.provisioner.env so the operator
 #    can re-run the provisioner from an interactive SSH session. RunPod does
 #    NOT export the container start env to SSH shells, so without this file
@@ -156,6 +164,7 @@ export HUGGINGFACE_API_KEY="${HF_TOKEN}"
     printf "export SYNCTHING_PEER_NAME=%q\n"      "${SYNCTHING_PEER_NAME:-}"
     printf "export SYNCTHING_FOLDER_ID=%q\n"      "${SYNCTHING_FOLDER_ID:-}"
     printf "export SYNCTHING_FOLDER_LABEL=%q\n"   "${SYNCTHING_FOLDER_LABEL:-}"
+    printf "export COMFYUI_API_BASE=%q\n"         "${COMFYUI_API_BASE}"
   } > /workspace/.provisioner.env
 )
 chmod 600 /workspace/.provisioner.env
