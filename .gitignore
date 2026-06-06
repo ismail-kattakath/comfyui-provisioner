@@ -37,3 +37,11 @@ provision.pid
 
 # stray runpodctl download artifact (now installed to ~/.local/bin)
 runpodctl
+
+# Brainstorming backlog runtime state (structure tracked; live state is per-environment)
+.claude/backlog/inbox.jsonl
+.claude/backlog/items.json
+.claude/backlog/ledger.json
+.claude/backlog/.last-dispatch
+.claude/backlog/AUTOPILOT
+.claude/backlog/PAUSED

@@ -170,6 +170,16 @@ Local project MCPs always override `MCP_DOCKER` equivalents. Never use `Bash(cur
 | Memory across sessions | `mcp__memory__*` — `search_nodes` to recall, `create_entities`/`add_observations` to store |
 | Multi-step planning | `mcp__sequentialthinking__sequentialthinking` first |
 
+## Brainstorming Backlog (capture -> groom -> dispatch)
+
+`/idea <text>` instantly captures an idea to `.claude/backlog/` (1-line ack, no waiting). A
+background `backlog-groomer` subagent continuously refines/reconciles/reprioritizes items and
+NEVER executes. `/backlog` views the list. A `Stop` hook auto-dispatches the top ready,
+parallel-safe, non-gated item to a background executor ONLY when autopilot is on
+(`touch .claude/backlog/AUTOPILOT`; default off = zero interference with normal work). Kill
+switch: `touch .claude/backlog/PAUSED`. Paid/push/destructive items are gated to the user.
+Full operating guide: `.claude/backlog/OPERATING.md`.
+
 ## Agent Spawning
 
 ### Subagents vs Agent Teams

@@ -45,7 +45,13 @@
       "Agent(stack-preflight)",
       "Agent(stack-groomer)",
       "Bash(bash scripts/ensure-syncthing.sh*)",
-      "Agent(syncthing-wirer)"
+      "Agent(syncthing-wirer)",
+      "Agent(backlog-groomer)",
+      "Bash(bash .claude/hooks/backlog-dispatch.sh*)",
+      "Bash(touch .claude/backlog/*)",
+      "Bash(rm .claude/backlog/AUTOPILOT)",
+      "Bash(rm .claude/backlog/PAUSED)",
+      "Bash(python3 -c *)"
     ],
     "deny": [],
     "defaultMode": "default"
@@ -149,6 +155,18 @@
           {
             "type": "command",
             "command": "printf '{\"systemMessage\":\"Subagent starting. If this agent is deploying or verifying a VastAI instance, note its instance ID and task in Memory (mcp__memory__add_observations) to enable cross-session continuity.\"}'"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/backlog-dispatch.sh\"",
+            "timeout": 5
           }
         ]
       }
