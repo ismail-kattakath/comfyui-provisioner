@@ -43,7 +43,9 @@
       "Bash(scp *)",
       "Bash(vastai *)",
       "Agent(stack-preflight)",
-      "Agent(stack-groomer)"
+      "Agent(stack-groomer)",
+      "Bash(bash scripts/ensure-syncthing.sh*)",
+      "Agent(syncthing-wirer)"
     ],
     "deny": [],
     "defaultMode": "default"
@@ -57,6 +59,11 @@
             "type": "command",
             "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/load-env.sh\"",
             "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/syncthing-session-start.sh\"",
+            "timeout": 5
           }
         ]
       }

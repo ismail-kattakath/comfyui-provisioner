@@ -1,18 +1,20 @@
 #!/usr/bin/env bash
 # scripts/pair-syncthing-container.sh
 #
-# Container-side Syncthing pairing for the HOSTLESS case (S2b): a cloud/remote
-# devcontainer with no host Syncthing and no host bind-mount to consume. Starts
-# a Syncthing daemon INSIDE the container with a persistent config dir, pairs it
-# with a running VastAI instance, and creates a receiveonly folder at the stack's
-# comfyui/ directory — the container-side analogue of the Mac-only /pair-syncthing.
+# Container-side Syncthing pairing: starts a Syncthing daemon INSIDE the
+# container with a persistent config dir, pairs it with a running VastAI
+# instance, and creates a receiveonly folder at the stack's comfyui/ directory.
+#
+# New policy: the Mac host NEVER runs Syncthing — all wiring is container-side.
+# For idempotent auto-healed wiring, prefer scripts/ensure-syncthing.sh.
+# Use this script for the initial explicit pair operation.
 #
 # Uses the VS Code-forwarded SSH agent to reach the instance (no key file needed).
 #
-# !! GUARD !!  If the stack's comfyui/ is a HOST bind-mount (the normal local-Mac
-# setup, S1/S2a), this REFUSES — running a second daemon there corrupts the shared
-# .stfolder/index. Override with FORCE=1 only if the host daemon is permanently
-# absent and you accept the risk.
+# NOTE: If the stack's comfyui/ is on a virtiofs/9p bind-mount, a one-line info
+# note is printed and pairing continues — the host never runs Syncthing under
+# the new policy, so a bind-mount is not a conflict.
+# FORCE=1 is accepted as a no-op for back-compat.
 #
 # Persistence: the daemon's config (hence its stable device ID) lives at
 # $SYNCTHING_CONFIG_DIR (default /comfy/.syncthing — the comfyui_data named volume,
@@ -21,10 +23,9 @@
 #
 # Usage:
 #   scripts/pair-syncthing-container.sh <INSTANCE_ID> [STACK_DIR|STACK_NAME]
-#   Env: SYNCTHING_CONFIG_DIR (default /comfy/.syncthing), FORCE=1 to bypass guard.
+#   Env: SYNCTHING_CONFIG_DIR (default /comfy/.syncthing), FORCE=1 (no-op; back-compat).
 #
-# Exit codes: 0 paired; 1 error / refused.
-
+# Exit codes: 0 paired; 1 error.
 set -uo pipefail
 
 INSTANCE_ID="${1:-}"; STACK_ARG="${2:-}"
@@ -48,21 +49,14 @@ LOCAL_PATH="$(resolve_dir "$STACK_ARG")" || die "could not resolve stack comfyui
 mkdir -p "$LOCAL_PATH"
 log "local folder target: $LOCAL_PATH"
 
-# ---------- GUARD: refuse on a host bind-mount unless FORCE ----------
+# ---------- NOTE: bind-mount is no longer a conflict (host never runs Syncthing) ----------
 FSTYPE="$(findmnt -T "$LOCAL_PATH" -no FSTYPE 2>/dev/null || true)"
 case "$FSTYPE" in
   virtiofs|9p|nfs|nfs4|cifs|smb3)
-    if [ "${FORCE:-0}" != 1 ]; then
-      die "comfyui/ is a HOST bind-mount (fstype=$FSTYPE) — this is the S1/S2a case.
-       Use host Syncthing (/pair-syncthing from the Mac), not a container daemon.
-       A container daemon here would corrupt the shared .stfolder/index.
-       Run scripts/sync-status.sh for the full picture. Override with FORCE=1 only
-       if the host daemon is permanently absent."
-    fi
-    log "WARNING: FORCE=1 — proceeding on a host bind-mount (fstype=$FSTYPE). Conflict risk is yours."
+    log "note: comfyui/ is on a host bind-mount (fstype=$FSTYPE) — proceeding; host no longer runs Syncthing."
     ;;
 esac
-
+# FORCE=1 accepted as no-op for back-compat
 # ---------- ensure syncthing binary ----------
 command -v syncthing >/dev/null 2>&1 || die "syncthing not installed. Rebuild the devcontainer
        (install-syncthing postCreate) or: sudo apt-get install -y syncthing"
@@ -72,15 +66,7 @@ mkdir -p "$CFG"
 GUI=127.0.0.1:18384
 st(){ syncthing cli --gui-address="$GUI" --gui-apikey="$ST_APIKEY" "$@"; }
 
-# device id is derivable from the cert without a running daemon
-CONTAINER_DEVICE_ID="$(syncthing --home="$CFG" --device-id 2>/dev/null || true)"
-if [ -z "$CONTAINER_DEVICE_ID" ]; then
-  log "generating syncthing identity in $CFG"
-  syncthing generate --home="$CFG" >/dev/null 2>&1 || true
-  CONTAINER_DEVICE_ID="$(syncthing --home="$CFG" --device-id 2>/dev/null || true)"
-fi
-[ -n "$CONTAINER_DEVICE_ID" ] || die "could not derive container device id"
-log "container device id: $CONTAINER_DEVICE_ID"
+# device id read from running daemon REST (NOT --device-id flag; cert is lazy before daemon starts)
 
 if ! pgrep -x syncthing >/dev/null 2>&1; then
   log "starting container syncthing daemon (config: $CFG)"
@@ -95,6 +81,11 @@ for _ in $(seq 1 30); do
   sleep 1
 done
 [ -n "$ST_APIKEY" ] || die "container syncthing API never came up (see /tmp/syncthing-container.log)"
+
+# get container device id from running daemon REST
+CONTAINER_DEVICE_ID="$(st show system 2>/dev/null | python3 -c 'import json,sys; print(json.load(sys.stdin).get("myID",""))' 2>/dev/null || true)"
+[ -n "$CONTAINER_DEVICE_ID" ] || die "could not read container device id from running daemon"
+log "container device id: $CONTAINER_DEVICE_ID"
 
 # ---------- resolve instance SSH (agent-forwarded) ----------
 command -v vastai >/dev/null 2>&1 || die "vastai CLI not installed"

@@ -21,6 +21,9 @@ __pycache__/
 # working set of comfyui-stack-* siblings, not anything about the tool.
 .devcontainer/docker-compose.siblings.yml
 
+# Syncthing instance marker (created by ensure-syncthing.sh; local to each checkout)
+.syncthing-instance
+
 # Provisioning runtime artifacts (only created when running on a host)
 provision.log
 provision_*.log

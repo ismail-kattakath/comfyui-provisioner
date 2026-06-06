@@ -39,8 +39,9 @@ Tracked (part of the public repo):
 - `scripts/provision-comfyui.sh` — generic 7-phase provisioner (preflight, system, tokens, nodes, workflows, models, manager-update, restart)
 - `scripts/preflight-stack.sh` — GPU-free readiness checker (T0–T4 tiers; see Stack Onboarding)
 - `scripts/check-access.sh` — GPU-free connectivity & auth preflight (HF/GitHub/Civitai/Vast.ai/RunPod + SSH agent); the `/check-access` command wraps it
-- `scripts/sync-status.sh` — detect Syncthing topology (host-backed live / stale / hostless) + conflict guard; `/sync-status` wraps it
-- `scripts/pair-syncthing-container.sh` — container-side Syncthing pairing for the hostless case; `/pair-syncthing-container` wraps it
+- `scripts/ensure-syncthing.sh` — idempotent container-side Syncthing wiring primitive; checks, heals, and verifies the devcontainer↔instance pipe; auto-run on session start; `/sync-wire` wraps it
+- `scripts/sync-status.sh` — detect Syncthing topology and report signals (fstype, daemon state, file age); read-only; `/sync-status` wraps it
+- `scripts/pair-syncthing-container.sh` — explicit initial pairing (one-shot); for automated/idempotent wiring prefer `ensure-syncthing.sh`
 - `scripts/stack-lock.sh` — provenance backfill: records HF sha256 + optionally pins NODE_MAP commits (see Stack Onboarding)
 - `providers/vastai/` — VastAI `--onstart-cmd` bootstrap + saved template + README
 - `providers/runpod/` — RunPod `onstart.sh`, `launch.sh`, and `template.json` (fully implemented)
@@ -94,8 +95,8 @@ Provider bootstraps (`providers/*/onstart.sh`) clone both repos at runtime — p
 - **SSH access from the devcontainer** — VS Code forwards the host SSH agent into the container automatically (`SSH_AUTH_SOCK` is set); no key file lives in the container. Load the key once on the host (`ssh-add --apple-use-keychain ~/.ssh/id_ed25519`) and `ssh` / `vastai ssh-url <id>` work from inside. A `Host *` block (`AddKeysToAgent yes`, `UseKeychain yes`) in the host `~/.ssh/config` makes it survive host reboots; container rebuilds need nothing (agent re-forwarded; the key lives on the host). Leave `SSH_KEY_FILE` unset — skills use plain `ssh` (no `-i`). `SSH_KEY_FILE`/`SSH_KEY_PUBLIC_FILE` are only for *provisioning* new instances (`vastai attach ssh`).
 - **`vastai execute` only works on STOPPED instances** — running ones reject it with "Use ssh to run commands on running instances." Drive live instances over SSH (see above), not `vastai execute`.
 - **`/check-access` (`scripts/check-access.sh`)** — connectivity & auth preflight for HF/GitHub/Civitai/Vast.ai/RunPod + the SSH agent. Run it at session start, after editing `.env`, or before any deploy. Exit `0` READY / `1` NOT-READY; RunPod + SSH are advisory.
-- **Syncthing topology (S1/S2a/S2b)** — `/sync-status [stack]` classifies whether the stack's `comfyui/` is host-backed+live (S1: consume via mount, drive from host), host-backed+stale (S2a: start host Syncthing), or hostless (S2b: cloud/remote container). Only S2b warrants a container daemon — `/pair-syncthing-container <instance>` (which refuses on a host bind-mount). Never run two Syncthing daemons against one bind-mounted dir.
-- **Syncthing runs on the Mac host, not the devcontainer** — the container consumes synced files via the `/workspaces` bind-mount; do not run a second Syncthing daemon against the same dirs. The `syncthing` CLI is preinstalled in the image (best-effort) only for the *no-host-Syncthing* case (cloud/remote container) — it is NOT auto-started.
+- **Syncthing policy: host never, container always** — the Mac host never runs Syncthing. All wiring is container-side via `scripts/ensure-syncthing.sh` (config: `/comfy/.syncthing`, persistent named volume; GUI `127.0.0.1:18384`). Auto-healed on session start for any stack with a `.syncthing-instance` marker. Use `/sync-wire [stack] [instance-id]` for manual check/establish; `--troubleshoot` for deep diagnosis; the `syncthing-wirer` background agent for automated repair.
+- **`/sync-status`** — read-only topology reporter (fstype, daemon state, file age, conflict guard). Still useful for inspecting signals; action is now always `/sync-wire`, never "start host Syncthing".
 
 ## Stack Onboarding / Grooming
 
