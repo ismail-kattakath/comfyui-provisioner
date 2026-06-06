@@ -599,7 +599,7 @@ sha256_of() {
 }
 
 download_model() {
-  local rel="$1" url="$2"
+  local rel="$1" url="$2" expected_sha="${3:-}"
   local target="$MODELS/$rel"
   local partial="$target.partial"
   mkdir -p "$(dirname "$target")"
@@ -609,6 +609,9 @@ download_model() {
   expected_size="$(printf '%s' "$head_out" | awk '{print $1}')"
   expected_etag="$(printf '%s' "$head_out" | awk '{print $2}')"
   expected_size="${expected_size:-0}"
+  # Prefer the pinned sha from MODEL_MAP over the HF-reported etag when both
+  # are present — the pinned value is the authoritative provenance signal.
+  [ -n "$expected_sha" ] && expected_etag="$expected_sha"
 
   local local_size
   local_size="$(filesize "$target")"
@@ -750,9 +753,11 @@ download_civitai() {
 if [ "${SKIP_MODELS:-0}" != "1" ]; then
   banner "Phase 5 — Models"
   for entry in "${MODEL_MAP[@]}"; do
-    rel="${entry%%|*}"
-    url="${entry#*|}"
-    download_model "$rel" "$url"
+    # MODEL_MAP entry format: rel|url[|sha256]
+    # Split on the FIRST two pipes only — bash's "%%" / "#" patterns
+    # mis-handled this and left the sha glued to the url, causing a 404.
+    IFS='|' read -r rel url sha <<<"$entry"
+    download_model "$rel" "$url" "$sha"
   done
 
   # --- Civitai downloads (needs CIVITAI_API_KEY; sha256-verified) ---
