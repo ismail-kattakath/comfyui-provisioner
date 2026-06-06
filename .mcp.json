@@ -125,6 +125,15 @@
         "-y",
         "@runpod/mcp-server@latest"
       ]
+    },
+    "vastai-logs-fs": {
+      "_comment": "Read-only filesystem MCP rooted at the local Syncthing mirror of the live vast.ai instance's /var/log/portal. Populated by /pair-vastai-logs. Lets Claude Read/Grep ComfyUI tracebacks, provisioning errors, and api-wrapper failures directly without SSH tail. Folder is Syncthing receiveonly so local edits stay quarantined; the MCP cannot push changes back to the instance. Path is hard-coded to the iclight-v2v stack; copy this block into other stack repos under a different MCP id when needed.",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "/Users/aloshy/aloshy-ai/comfyui-stack-iclight-v2v/logs"
+      ]
     }
   }
 }

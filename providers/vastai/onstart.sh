@@ -81,6 +81,14 @@
 #   SYNCTHING_PEER_NAME       Friendly name for the peer (default: local-peer)
 #   SYNCTHING_FOLDER_ID       Folder ID, must match peer (default: comfyui-workflows)
 #   SYNCTHING_FOLDER_LABEL    Display label (default: "ComfyUI Workflows")
+#   SYNCTHING_LOGS_FOLDER_ID  Logs folder ID (default: comfyui-logs)
+#   SYNCTHING_LOGS_LABEL      Logs folder display label (default: "ComfyUI Logs")
+#
+# Optional debug knob (disabled by default — DEBUG is genuinely loud, ~50k
+# lines per render, and silently slows the hot path on KSampler/VAE):
+#   COMFYUI_LOG_LEVEL         DEBUG|INFO|WARNING|ERROR. When set, the
+#                             provisioner appends "--verbose <LEVEL>" to
+#                             COMFYUI_ARGS. Unset / empty = no flag added.
 
 set -euo pipefail
 
@@ -260,6 +268,9 @@ fi
     printf "export SYNCTHING_PEER_NAME=%q\n"      "${SYNCTHING_PEER_NAME:-}"
     printf "export SYNCTHING_FOLDER_ID=%q\n"      "${SYNCTHING_FOLDER_ID:-}"
     printf "export SYNCTHING_FOLDER_LABEL=%q\n"   "${SYNCTHING_FOLDER_LABEL:-}"
+    printf "export SYNCTHING_LOGS_FOLDER_ID=%q\n" "${SYNCTHING_LOGS_FOLDER_ID:-}"
+    printf "export SYNCTHING_LOGS_LABEL=%q\n"     "${SYNCTHING_LOGS_LABEL:-}"
+    printf "export COMFYUI_LOG_LEVEL=%q\n"        "${COMFYUI_LOG_LEVEL:-}"
   } > /workspace/.provisioner.env
 )
 chmod 600 /workspace/.provisioner.env
@@ -444,9 +455,36 @@ if [ -n "${SYNCTHING_PEER_DEVICE_ID:-}" ]; then
     echo "[onstart] sharing $ST_FOLDER_ID with $SYNCTHING_PEER_DEVICE_ID"
   fi
 
+  # ---- second folder: ComfyUI + provisioner + api-wrapper logs (sendonly) ----
+  # Mirrors /var/log/portal to the operator's Mac so triage can use native
+  # Read / Grep instead of SSH tail. .stignore keeps the noisy stuff out.
+  ST_LOGS_FOLDER_ID="${SYNCTHING_LOGS_FOLDER_ID:-comfyui-logs}"
+  ST_LOGS_LABEL="${SYNCTHING_LOGS_LABEL:-ComfyUI Logs}"
+  ST_LOGS_PATH="/var/log/portal"
+  if [ ! -f "${ST_LOGS_PATH}/.stignore" ]; then
+    cat > "${ST_LOGS_PATH}/.stignore" <<'STIG'
+!comfyui.log
+!comfyui.log.old
+!provisioning.log
+!provisioning.log.old
+!api-wrapper.log
+!api-wrapper.log.old
+*
+STIG
+    echo "[onstart] wrote ${ST_LOGS_PATH}/.stignore (4 logs + .old rotations)"
+  fi
+  if ! "${ST_CLI[@]}" config folders list 2>/dev/null | grep -qF "$ST_LOGS_FOLDER_ID"; then
+    LOGS_JSON=$(printf '{"id":"%s","label":"%s","path":"%s","type":"sendonly","rescanIntervalS":30,"fsWatcherEnabled":true,"ignorePerms":true,"devices":[{"deviceID":"%s"}]}' \
+      "$ST_LOGS_FOLDER_ID" "$ST_LOGS_LABEL" "$ST_LOGS_PATH" "$SYNCTHING_PEER_DEVICE_ID")
+    curl -sf -X PUT -H "X-API-Key: $ST_API_KEY" -H "Content-Type: application/json" \
+      -d "$LOGS_JSON" "http://${ST_GUI_ADDR}/rest/config/folders/${ST_LOGS_FOLDER_ID}" >/dev/null
+    echo "[onstart] created sendonly logs folder $ST_LOGS_FOLDER_ID -> $ST_LOGS_PATH"
+  fi
+
   echo "[onstart] syncthing pre-pair complete"
   echo "[onstart]   instance device ID: $INSTANCE_DEV_ID"
   echo "[onstart]   on your laptop, run: /pair-syncthing <this-instance-id>"
+  echo "[onstart]   then:                /pair-vastai-logs <this-instance-id>"
 else
   echo "[onstart] SYNCTHING_PEER_DEVICE_ID unset — syncthing daemon is running as root but no auto-pair was performed."
   echo "[onstart]   To enable: set -e SYNCTHING_PEER_DEVICE_ID=<your-laptop-device-id> on 'vastai create instance'."

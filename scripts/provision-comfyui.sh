@@ -377,6 +377,39 @@ else
   fi
 fi
 
+# Optional: --verbose <LEVEL> in COMFYUI_ARGS, gated by COMFYUI_LOG_LEVEL env var
+# (DEBUG, INFO, WARN, ERROR). Default behaviour is silent — we never inject a
+# verbosity flag unless the operator explicitly opts in via -e COMFYUI_LOG_LEVEL
+# on instance launch (or via /workspace/.provisioner.env for a reprovision).
+# We keep the default at INFO because DEBUG produces ~50k+ lines per render,
+# masks real errors, and adds measurable per-step latency on the hot path.
+if [ -n "${COMFYUI_LOG_LEVEL:-}" ]; then
+  case "$COMFYUI_LOG_LEVEL" in
+    DEBUG|INFO|WARNING|ERROR)
+      if ! grep -E '^COMFYUI_ARGS=' "$ARGS_FILE" | grep -q -- '--verbose'; then
+        log "Appending --verbose $COMFYUI_LOG_LEVEL to COMFYUI_ARGS in $ARGS_FILE"
+        tmp="$(mktemp)"
+        awk -v lvl="$COMFYUI_LOG_LEVEL" '{
+          if ($0 ~ /^COMFYUI_ARGS=/) {
+            line = $0; n = length(line); last = substr(line, n, 1)
+            if (last == "\"" || last == "'\''") {
+              print substr(line, 1, n-1) " --verbose " lvl last
+            } else {
+              print line " --verbose " lvl
+            }
+          } else { print $0 }
+        }' "$ARGS_FILE" > "$tmp"
+        mv "$tmp" "$ARGS_FILE"
+      else
+        log "[ok] COMFYUI_ARGS already contains --verbose"
+      fi
+      ;;
+    *)
+      warn "COMFYUI_LOG_LEVEL='$COMFYUI_LOG_LEVEL' invalid (expected DEBUG|INFO|WARNING|ERROR) — ignoring"
+      ;;
+  esac
+fi
+
 # Persist tokens
 if [ "$PLATFORM" = "Linux" ] && [ -f /etc/environment ] && [ -w /etc/environment ]; then
   TOKEN_FILE="/etc/environment"

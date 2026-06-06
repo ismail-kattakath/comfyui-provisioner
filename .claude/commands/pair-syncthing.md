@@ -151,6 +151,12 @@ Daily flow:
   • Edit workflows in ComfyUI on the instance → Cmd+S
   • Files appear in <LOCAL_PATH> within ~10s
   • `cd <LOCAL_REPO> && git commit -am "..." && git push` from the Mac
+
+Next step (recommended):
+  /pair-vastai-logs <INSTANCE_ID>
+    Pairs /var/log/portal/ → <LOCAL_REPO>/logs/ so ComfyUI tracebacks,
+    provisioner failures, and api-wrapper errors land locally in real time.
+    Lets Claude diagnose render failures without SSH-tailing every turn.
 ```
 
 ## Step 7 — Offer cleanup of stale instance devices
