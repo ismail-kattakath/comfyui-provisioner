@@ -132,22 +132,23 @@ ST_API -X PUT -H "Content-Type: application/json" -d "\$NEW_FOLDER" \
 EOF
 ```
 
-## Step 3 — Derive local stack repo path
+## Step 3 — Ensure stack is present locally + derive its path
 
-Derived from the provisioner repo's own location — never hardcode a username
-or absolute path. Stacks are expected to live as siblings of provisioner.
+Delegate to the reusable primitive `scripts/ensure-stack.sh` — clones if
+missing, fetches if present, prints `STACK_DIR=<absolute path>`. `STACK_REPO`
+comes from `/workspace/.provisioner.env` on the instance (already read in
+Step 1).
 
 ```bash
-source /workspace/.provisioner.env  # already read in Step 1; STACK_REPO comes from there
 PROVISIONER_ROOT="$(git rev-parse --show-toplevel)"
-PARENT_DIR="$(cd "$PROVISIONER_ROOT/.." && pwd)"
-LOCAL_REPO="$PARENT_DIR/$(basename $STACK_REPO)"
+ENSURE_OUT="$("$PROVISIONER_ROOT/scripts/ensure-stack.sh" "$STACK_REPO")" || {
+  echo "ensure-stack failed for $STACK_REPO; aborting"; exit 1
+}
+eval "$(echo "$ENSURE_OUT" | tail -1)"   # exports STACK_DIR
+LOCAL_REPO="$STACK_DIR"
 LOCAL_LOGS="$LOCAL_REPO/logs"
 mkdir -p "$LOCAL_LOGS"
 ```
-
-If `$LOCAL_REPO` doesn't exist: tell the user to run `/ensure-stack
-$STACK_REPO` (which clones it as a sibling and wires the workspace) first.
 
 ## Step 4 — Add matching receiveonly folder on the Mac
 

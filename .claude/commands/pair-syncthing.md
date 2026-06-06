@@ -88,21 +88,26 @@ If `FOLDER_ID` is empty: instance was provisioned without
 with that env var set, or run the manual three-command pair on the instance
 side (see CLAUDE.md's Syncthing section).
 
-## Step 2 — Derive local stack repo path
+## Step 2 — Ensure stack is present locally + derive its path
 
-Derived from the provisioner repo's own location — never hardcode a username
-or absolute path. Stacks are expected to live as siblings of provisioner.
+Delegate to the reusable primitive `scripts/ensure-stack.sh`. It clones the
+stack as a sibling of provisioner if missing, fetches if present, refreshes
+the workspace + devcontainer compose-siblings fragment, and prints
+`STACK_DIR=<absolute path>` on stdout.
 
 ```bash
 PROVISIONER_ROOT="$(git rev-parse --show-toplevel)"
-PARENT_DIR="$(cd "$PROVISIONER_ROOT/.." && pwd)"
-LOCAL_REPO="$PARENT_DIR/$(basename $STACK_REPO)"
+ENSURE_OUT="$("$PROVISIONER_ROOT/scripts/ensure-stack.sh" "$STACK_REPO")" || {
+  echo "ensure-stack failed for $STACK_REPO; aborting"; exit 1
+}
+eval "$(echo "$ENSURE_OUT" | tail -1)"   # exports STACK_DIR
+LOCAL_REPO="$STACK_DIR"
 LOCAL_PATH="$LOCAL_REPO/comfyui"
 ```
 
-Verify `$LOCAL_PATH` exists. If not, tell the user to `git clone $STACK_REPO`
-as a sibling of provisioner first, then retry. (Or run `/ensure-stack
-$STACK_REPO` which clones + wires the workspace.)
+If `$LOCAL_PATH` doesn't exist after ensure-stack completes, the stack repo
+doesn't ship a `comfyui/` directory — confirm with the user (it's part of
+the stack contract; missing means a malformed stack).
 
 ## Step 3 — Add instance device to local Syncthing (idempotent)
 
