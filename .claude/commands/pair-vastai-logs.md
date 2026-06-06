@@ -134,14 +134,20 @@ EOF
 
 ## Step 3 — Derive local stack repo path
 
+Derived from the provisioner repo's own location — never hardcode a username
+or absolute path. Stacks are expected to live as siblings of provisioner.
+
 ```bash
 source /workspace/.provisioner.env  # already read in Step 1; STACK_REPO comes from there
-LOCAL_REPO=/Users/aloshy/aloshy-ai/$(basename $STACK_REPO)
-LOCAL_LOGS=$LOCAL_REPO/logs
+PROVISIONER_ROOT="$(git rev-parse --show-toplevel)"
+PARENT_DIR="$(cd "$PROVISIONER_ROOT/.." && pwd)"
+LOCAL_REPO="$PARENT_DIR/$(basename $STACK_REPO)"
+LOCAL_LOGS="$LOCAL_REPO/logs"
 mkdir -p "$LOCAL_LOGS"
 ```
 
-If `$LOCAL_REPO` doesn't exist: tell the user to clone the stack repo first.
+If `$LOCAL_REPO` doesn't exist: tell the user to run `/ensure-stack
+$STACK_REPO` (which clones it as a sibling and wires the workspace) first.
 
 ## Step 4 — Add matching receiveonly folder on the Mac
 

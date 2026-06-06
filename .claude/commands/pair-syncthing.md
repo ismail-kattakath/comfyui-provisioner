@@ -90,13 +90,19 @@ side (see CLAUDE.md's Syncthing section).
 
 ## Step 2 — Derive local stack repo path
 
+Derived from the provisioner repo's own location — never hardcode a username
+or absolute path. Stacks are expected to live as siblings of provisioner.
+
 ```bash
-LOCAL_REPO=/Users/aloshy/aloshy-ai/$(basename $STACK_REPO)
-LOCAL_PATH=$LOCAL_REPO/comfyui
+PROVISIONER_ROOT="$(git rev-parse --show-toplevel)"
+PARENT_DIR="$(cd "$PROVISIONER_ROOT/.." && pwd)"
+LOCAL_REPO="$PARENT_DIR/$(basename $STACK_REPO)"
+LOCAL_PATH="$LOCAL_REPO/comfyui"
 ```
 
 Verify `$LOCAL_PATH` exists. If not, tell the user to `git clone $STACK_REPO`
-under `~/aloshy-ai/` first, then retry.
+as a sibling of provisioner first, then retry. (Or run `/ensure-stack
+$STACK_REPO` which clones + wires the workspace.)
 
 ## Step 3 — Add instance device to local Syncthing (idempotent)
 
