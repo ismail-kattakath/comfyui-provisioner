@@ -35,6 +35,13 @@
       "Agent(vastai-stack-verifier)",
       "Bash(bash scripts/preflight-stack.sh*)",
       "Bash(bash scripts/stack-lock.sh*)",
+      "Bash(bash scripts/check-access.sh*)",
+      "Bash(bash scripts/sync-status.sh*)",
+      "Bash(bash scripts/pair-syncthing-container.sh*)",
+      "Bash(ssh *)",
+      "Bash(ssh-add *)",
+      "Bash(scp *)",
+      "Bash(vastai *)",
       "Agent(stack-preflight)",
       "Agent(stack-groomer)"
     ],

@@ -20,7 +20,8 @@
     "authorize-env": "direnv allow",
     "install-comfy-cli": "pip install --user --upgrade comfy-cli",
     "install-runpod-cli": "mkdir -p $HOME/.local/bin && wget --quiet https://github.com/runpod/runpodctl/releases/latest/download/runpodctl-linux-amd64 -O $HOME/.local/bin/runpodctl && chmod +x $HOME/.local/bin/runpodctl",
-    "install-vastai-cli": "pip install --user --upgrade vastai"
+    "install-vastai-cli": "pip install --user --upgrade vastai",
+    "install-syncthing": "sudo install -m 0755 -d /etc/apt/keyrings && curl -fsSL https://syncthing.net/release-key.gpg | sudo gpg --dearmor -o /etc/apt/keyrings/syncthing.gpg && echo 'deb [signed-by=/etc/apt/keyrings/syncthing.gpg] https://apt.syncthing.net/ syncthing stable' | sudo tee /etc/apt/sources.list.d/syncthing.list >/dev/null && sudo apt-get update -qq && sudo apt-get install -y -qq syncthing || echo 'syncthing preinstall skipped (best-effort; CLI optional)'"
   },
   "postAttachCommand": {
     "sanitize-env": "direnv reload"
@@ -40,7 +41,7 @@
         "shd101wyy.markdown-preview-enhanced"
       ],
       "settings": {
-        "workbench.colorTheme": "WebStorm Darker",
+        "workbench.colorTheme": "WebStorm New Dark",
         "terminal.integrated.defaultProfile.linux": "zsh",
         "terminal.integrated.profiles.linux": {
           "zsh": {

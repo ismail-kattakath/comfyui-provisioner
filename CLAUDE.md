@@ -38,6 +38,9 @@ bash scripts/provision-comfyui.sh
 Tracked (part of the public repo):
 - `scripts/provision-comfyui.sh` — generic 7-phase provisioner (preflight, system, tokens, nodes, workflows, models, manager-update, restart)
 - `scripts/preflight-stack.sh` — GPU-free readiness checker (T0–T4 tiers; see Stack Onboarding)
+- `scripts/check-access.sh` — GPU-free connectivity & auth preflight (HF/GitHub/Civitai/Vast.ai/RunPod + SSH agent); the `/check-access` command wraps it
+- `scripts/sync-status.sh` — detect Syncthing topology (host-backed live / stale / hostless) + conflict guard; `/sync-status` wraps it
+- `scripts/pair-syncthing-container.sh` — container-side Syncthing pairing for the hostless case; `/pair-syncthing-container` wraps it
 - `scripts/stack-lock.sh` — provenance backfill: records HF sha256 + optionally pins NODE_MAP commits (see Stack Onboarding)
 - `providers/vastai/` — VastAI `--onstart-cmd` bootstrap + saved template + README
 - `providers/runpod/` — RunPod `onstart.sh`, `launch.sh`, and `template.json` (fully implemented)
@@ -88,6 +91,11 @@ Provider bootstraps (`providers/*/onstart.sh`) clone both repos at runtime — p
 - **`MANUAL_MODELS` array** — stacks may declare `MANUAL_MODELS=( "path/to/asset.safetensors" )` in `provisioner-config.sh` for assets that require out-of-band placement (personal fine-tunes, licensed-only, no public URL). `preflight-stack.sh` treats these as known, not gaps. Known patterns from the calibration corpus: `next-scene_lora`, `SexGod_*`, `beeg23`, `phool-realism`.
 - **Preflight exit codes** — `0` READY / `2` NEEDS-FETCH (composable but models not on disk) / `1` NOT-READY (hard failure). Exit code 2 is normal pre-deployment state — not an error.
 - **Preflight calibration** — known-good `comfyui-stack-*` repos pass T0–T3 in default mode. A T0–T3 failure in a known-good repo means the checker is wrong, not the stack.
+- **SSH access from the devcontainer** — VS Code forwards the host SSH agent into the container automatically (`SSH_AUTH_SOCK` is set); no key file lives in the container. Load the key once on the host (`ssh-add --apple-use-keychain ~/.ssh/id_ed25519`) and `ssh` / `vastai ssh-url <id>` work from inside. A `Host *` block (`AddKeysToAgent yes`, `UseKeychain yes`) in the host `~/.ssh/config` makes it survive host reboots; container rebuilds need nothing (agent re-forwarded; the key lives on the host). Leave `SSH_KEY_FILE` unset — skills use plain `ssh` (no `-i`). `SSH_KEY_FILE`/`SSH_KEY_PUBLIC_FILE` are only for *provisioning* new instances (`vastai attach ssh`).
+- **`vastai execute` only works on STOPPED instances** — running ones reject it with "Use ssh to run commands on running instances." Drive live instances over SSH (see above), not `vastai execute`.
+- **`/check-access` (`scripts/check-access.sh`)** — connectivity & auth preflight for HF/GitHub/Civitai/Vast.ai/RunPod + the SSH agent. Run it at session start, after editing `.env`, or before any deploy. Exit `0` READY / `1` NOT-READY; RunPod + SSH are advisory.
+- **Syncthing topology (S1/S2a/S2b)** — `/sync-status [stack]` classifies whether the stack's `comfyui/` is host-backed+live (S1: consume via mount, drive from host), host-backed+stale (S2a: start host Syncthing), or hostless (S2b: cloud/remote container). Only S2b warrants a container daemon — `/pair-syncthing-container <instance>` (which refuses on a host bind-mount). Never run two Syncthing daemons against one bind-mounted dir.
+- **Syncthing runs on the Mac host, not the devcontainer** — the container consumes synced files via the `/workspaces` bind-mount; do not run a second Syncthing daemon against the same dirs. The `syncthing` CLI is preinstalled in the image (best-effort) only for the *no-host-Syncthing* case (cloud/remote container) — it is NOT auto-started.
 
 ## Stack Onboarding / Grooming
 
