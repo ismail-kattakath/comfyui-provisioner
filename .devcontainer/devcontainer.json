@@ -1,8 +1,10 @@
 {
   "name": "comfyui-provisioner",
   "dockerComposeFile": [
-    "docker-compose.yml"
+    "docker-compose.yml",
+    "docker-compose.siblings.yml"
   ],
+  "initializeCommand": "bash ./scripts/refresh-workspace.sh",
   "service": "devcontainer",
   "workspaceFolder": "/workspaces/comfyui-provisioner",
   "features": {
