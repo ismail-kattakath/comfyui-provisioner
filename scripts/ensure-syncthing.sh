@@ -96,6 +96,8 @@ map_folder_suffix() {
   case "$id" in
     *-logs)      printf '%s\n' "logs/:receiveonly" ;;
     *-workflows) printf '%s\n' "comfyui/:receiveonly" ;;
+    *-output)    printf '%s\n' "output/:receiveonly" ;;
+    *-input)     printf '%s\n' "input/:sendonly" ;;
     *)           printf '' ;;
   esac
 }
