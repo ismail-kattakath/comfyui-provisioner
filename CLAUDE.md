@@ -96,6 +96,14 @@ Provider bootstraps (`providers/*/onstart.sh`) clone both repos at runtime — p
 - **`vastai execute` only works on STOPPED instances** — running ones reject it with "Use ssh to run commands on running instances." Drive live instances over SSH (see above), not `vastai execute`.
 - **`/check-access` (`scripts/check-access.sh`)** — connectivity & auth preflight for HF/GitHub/Civitai/Vast.ai/RunPod + the SSH agent. Run it at session start, after editing `.env`, or before any deploy. Exit `0` READY / `1` NOT-READY; RunPod + SSH are advisory.
 - **Syncthing policy: host never, container always** — the Mac host never runs Syncthing. All wiring is container-side via `scripts/ensure-syncthing.sh` (config: `/comfy/.syncthing`, persistent named volume; GUI `127.0.0.1:18384`). Auto-healed on session start for any stack with a `.syncthing-instance` marker. Use `/sync-wire [stack] [instance-id]` for manual check/establish; `--troubleshoot` for deep diagnosis; the `syncthing-wirer` background agent for automated repair.
+- **Canonical 4-folder set (deterministic per stack)** — `/sync-wire` ensures the full set exists on BOTH sides every run (creating missing folders, not just reconciling instance-advertised ones), so trial/debug locations are always known. Source of truth: `canonical_spec()` in `ensure-syncthing.sh`. `id = comfyui-<suffix>`:
+  | suffix | local subdir | instance path | direction |
+  |---|---|---|---|
+  | `logs` | `logs/` (recv) | `/var/log/portal` (send) | instance → here |
+  | `workflows` | `comfyui/` (recv) | `$COMFY/user/default/workflows` (send) | instance → here |
+  | `output` | `output/` (recv) | `$COMFY/output` (send) | instance → here (renders for live review) |
+  | `input` | `input/` (send) | `$COMFY/input` (recv) | here → instance (drop files to stage them) |
+  `$COMFY` = `INSTANCE_COMFY_DIR` (default `/workspace/ComfyUI`) — deliberately NOT `COMFYUI_DIR`, which points at the *container's* checkout and would yield a wrong instance path. `ensure-syncthing.sh` also keeps `logs/ output/ input/` in the stack's `.gitignore` (never `comfyui/`, which is tracked source). Edit workflows on the instance (`comfyui/` is receiveonly); renders land in `output/` automatically; stage inputs by dropping them in `input/`.
 - **`/sync-status`** — read-only topology reporter (fstype, daemon state, file age, conflict guard). Still useful for inspecting signals; action is now always `/sync-wire`, never "start host Syncthing".
 
 ## Stack Onboarding / Grooming
