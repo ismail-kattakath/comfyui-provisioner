@@ -43,7 +43,8 @@
         "BeardedBear.beardedtheme",
         "ms-azuretools.vscode-containers",
         "shd101wyy.markdown-preview-enhanced",
-        "Anthropic.claude-code"
+        "Anthropic.claude-code",
+        "GeriYoco.vscode-image-gallery"
       ],
       "settings": {
         "workbench.colorTheme": "Bearded Theme feat. Will",
