@@ -38,6 +38,32 @@ COUNTER_FILE="$STATE_DIR/readonly-count.$SAFE_SESSION"
 
 mkdir -p "$STATE_DIR"
 
+# --- Subagent exemption -------------------------------------------------------
+# The delegation rule constrains the LEAD only. Subagents ARE the delegation
+# target: they cannot spawn further subagents, so denying their 3rd read-only
+# call deadlocks them (they hit the "go dispatch a subagent" wall with no way to
+# comply, then confabulate). Exempt any session that is not the lead.
+#
+# A subagent's PreToolUse stdin .session_id differs from the lead's session id.
+# We detect the lead two independent ways:
+#   1. A marker file written at SessionStart (authoritative; refreshed per lead
+#      session) — see the SessionStart hook in settings.json.
+#   2. The CLAUDE_CODE_SESSION_ID env var, which carries the lead's id even into
+#      subagent hook processes (belt-and-suspenders when the marker is absent).
+# For the lead, stdin .session_id == marker == $CLAUDE_CODE_SESSION_ID, so the
+# lead is never exempted; only non-lead (subagent) sessions are.
+LEAD_FILE="$STATE_DIR/lead-session-id"
+LEAD_SESSION=""
+[[ -f "$LEAD_FILE" ]] && LEAD_SESSION="$(tr -d '[:space:]' < "$LEAD_FILE" 2>/dev/null || true)"
+ENV_SESSION="${CLAUDE_CODE_SESSION_ID:-}"
+
+if [[ -n "$LEAD_SESSION" && -n "$SESSION_ID" && "$SESSION_ID" != "$LEAD_SESSION" ]]; then
+  exit 0   # subagent (differs from recorded lead) — exempt
+fi
+if [[ -n "$ENV_SESSION" && -n "$SESSION_ID" && "$SESSION_ID" != "$ENV_SESSION" ]]; then
+  exit 0   # subagent (differs from lead env id) — exempt
+fi
+
 # --- Counter reset on Agent dispatch ---
 if [[ "$TOOL_NAME" == "Agent" ]]; then
   : > "$COUNTER_FILE"   # truncate

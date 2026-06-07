@@ -63,6 +63,11 @@
         "hooks": [
           {
             "type": "command",
+            "command": "input=$(cat); sid=$(printf '%s' \"$input\" | jq -r '.session_id // empty' 2>/dev/null || true); if [ -n \"$sid\" ]; then mkdir -p \"$CLAUDE_PROJECT_DIR/.claude/state\"; printf '%s' \"$sid\" > \"$CLAUDE_PROJECT_DIR/.claude/state/lead-session-id\"; fi; exit 0",
+            "timeout": 5
+          },
+          {
+            "type": "command",
             "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/load-env.sh\"",
             "timeout": 10
           },
