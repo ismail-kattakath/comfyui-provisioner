@@ -886,6 +886,12 @@ else
   banner "Phase 7 — Restart [SKIPPED]"
 fi
 
+# ---------- Post-provision hook (optional, defined in PROVISIONER_CONFIG) ----------
+if declare -f post_provision_hook >/dev/null 2>&1; then
+  banner "Post-provision hook"
+  post_provision_hook || warn "post_provision_hook failed"
+fi
+
 banner "Done"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 printf '%s/%s\n' "$SCRIPT_DIR" "$(basename "${BASH_SOURCE[0]}")"
