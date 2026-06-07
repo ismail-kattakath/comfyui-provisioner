@@ -112,16 +112,16 @@ COUNT=$((COUNT + 1))
 printf '%s' "$COUNT" > "$COUNTER_FILE"
 
 # --- Decide ---
-if [[ "$COUNT" -ge 3 ]]; then
-  REASON="Delegation default (CLAUDE.md): >2 read-only investigations in this session require dispatching a background Explore subagent. End the current turn and re-issue the work via Agent({run_in_background:true, subagent_type:'Explore', ...})."
-  jq -nc --arg reason "$REASON" '{
-    hookSpecificOutput: {
-      hookEventName: "PreToolUse",
-      permissionDecision: "deny",
-      permissionDecisionReason: $reason
-    }
-  }'
-  exit 0
+if [[ "$COUNT" -eq 3 ]]; then
+  # Advisory ONLY — NEVER deny. A hard deny deadlocks subagents: they are the
+  # delegation TARGET and cannot dispatch further subagents to reset the counter,
+  # so on their 3rd read-only call they hit an un-satisfiable wall and confabulate.
+  # The deny also false-blocked the lead on legitimate operational reads (judging
+  # synced renders, editing config). Emit a single non-blocking nudge at the
+  # threshold and always allow the call. (Was: permissionDecision=deny — removed
+  # 2026-06-07 after it killed a subagent mid-task for the 2nd time.)
+  MSG="Advisory (CLAUDE.md Delegation default): >2 read-only investigations this session. For discovery-heavy work prefer a background Explore subagent. Not blocking."
+  jq -nc --arg m "$MSG" '{systemMessage:$m}'
 fi
 
 exit 0
