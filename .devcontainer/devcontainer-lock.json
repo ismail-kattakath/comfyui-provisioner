@@ -10,6 +10,11 @@
       "resolved": "ghcr.io/devcontainer-community/devcontainer-features/dotenv.org@sha256:0edf5ea210e00828a38cd41bdf4743f34e891e23473b7a779230834540469567",
       "integrity": "sha256:0edf5ea210e00828a38cd41bdf4743f34e891e23473b7a779230834540469567"
     },
+    "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {
+      "version": "1.10.0",
+      "resolved": "ghcr.io/devcontainers/features/docker-outside-of-docker@sha256:c2c2cf829505ead8e4892c88c31b6594ae94a2bbb209e16e1fac456c1a3a624e",
+      "integrity": "sha256:c2c2cf829505ead8e4892c88c31b6594ae94a2bbb209e16e1fac456c1a3a624e"
+    },
     "ghcr.io/devcontainers/features/github-cli:1": {
       "version": "1.1.0",
       "resolved": "ghcr.io/devcontainers/features/github-cli@sha256:d22f50b70ed75339b4eed1ba9ecde3a1791f90e88d37936517e3bace0bbad671",

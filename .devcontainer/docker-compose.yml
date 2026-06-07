@@ -1,6 +1,6 @@
 services:
   devcontainer:
-    image: mcr.microsoft.com/devcontainers/base:ubuntu
+    image: mcr.microsoft.com/devcontainers/base:ubuntu-24.04
     environment:
       # ComfyUI lives under this workspace. providers/local/launch.sh installs it at
       # $COMFY_WORKSPACE/ComfyUI (comfy-cli nests ComfyUI/ under the workspace), so the

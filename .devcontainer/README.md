@@ -55,3 +55,44 @@ Devcontainers do **not** auto-load `docker-compose.override.yml`, so the overrid
 must be listed explicitly as above. The host path vars are referenced with
 `${VAR:?...}`, so Compose fails loudly if you enable a mode without setting its
 variable (an empty value would otherwise bind the container root `/`).
+
+## Siblings (stack repos)
+
+The devcontainer also mounts any sibling `comfyui-stack-*` repo it finds next to
+this provisioner repo on the host, so you can edit a stack and its provisioner
+side-by-side in a single multi-root VS Code window.
+
+Wiring:
+
+- `scripts/refresh-workspace.sh` (the `initializeCommand` hook in `devcontainer.json`)
+  scans `..` for `comfyui-stack-*` dirs and writes two files **on every container
+  start**, both gitignored (machine-local working set, not a property of the repo):
+  - `comfyui-workspace.code-workspace` — multi-root workspace file
+  - `.devcontainer/docker-compose.siblings.yml` — one bind mount per sibling →
+    `/workspaces/<sibling-name>` inside the container
+- `docker-compose.siblings.yml` is listed in `dockerComposeFile`, so adding/removing a
+  sibling on the host is reflected after a rebuild (or `Reopen in Container`).
+
+Add a new stack: `git clone … ../comfyui-stack-<name>` next to this repo, then
+rebuild the container. No manual edits to any compose file.
+
+## Host container engine (Podman / Docker)
+
+The `docker-outside-of-docker` feature gives the in-container `docker` CLI a socket to
+the **host's** container daemon. By default it bind-mounts host `/var/run/docker.sock`
+→ container `/var/run/docker-host.sock`.
+
+With Docker Desktop this works out of the box. With **Podman** on macOS the host
+socket lives elsewhere (under `/var/folders/.../podman/…`), so `/var/run/docker.sock`
+doesn't exist and the in-container CLI has nothing to talk to. Fix it once on the host:
+
+```sh
+sudo podman-mac-helper install
+podman machine restart      # picks up the new socket symlink
+ls -la /var/run/docker.sock # should be a symlink to the podman socket
+```
+
+After this, rebuild the devcontainer and `docker info` from inside it should report
+the Podman engine. Caveat: containers you `docker run` from inside the devcontainer
+execute against the **host** daemon — bind-mount sources must use **host** paths
+(`$LOCAL_WORKSPACE_FOLDER`), not `/workspaces/...`.

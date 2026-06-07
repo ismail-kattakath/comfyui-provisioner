@@ -45,3 +45,6 @@ runpodctl
 .claude/backlog/.last-dispatch
 .claude/backlog/AUTOPILOT
 .claude/backlog/PAUSED
+
+# Editor / tooling backup files
+*.bak

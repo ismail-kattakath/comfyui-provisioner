@@ -13,7 +13,11 @@
     "ghcr.io/esimkowitz/devcontainer-features/direnv:1": {},
     "ghcr.io/anthropics/devcontainer-features/claude-code:1": {},
     "ghcr.io/devcontainer-community/devcontainer-features/dotenv.org:1": {},
-    "ghcr.io/devcontainers/features/github-cli:1": {}
+    "ghcr.io/devcontainers/features/github-cli:1": {},
+    "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {}
+  },
+  "remoteEnv": {
+    "LOCAL_WORKSPACE_FOLDER": "${localWorkspaceFolder}"
   },
   "postCreateCommand": {
     "prepare-comfy-workspace": "sudo chown vscode:vscode /comfy",
@@ -36,16 +40,36 @@
         "fuadpashayev.bottom-terminal",
         "anthropic.claude-code",
         "mkhl.direnv",
-        "SeptWong.vscode-webstorm-theme",
+        "BeardedBear.beardedtheme",
         "ms-azuretools.vscode-containers",
-        "shd101wyy.markdown-preview-enhanced"
+        "shd101wyy.markdown-preview-enhanced",
+        "Anthropic.claude-code"
       ],
       "settings": {
-        "workbench.colorTheme": "WebStorm New Dark",
+        "workbench.colorTheme": "Bearded Theme feat. Will",
+        "workbench.colorCustomizations": {
+          "terminal.background": "#300A24",
+          "statusBarItem.remoteForeground": "#0c0a14",
+          "statusBarItem.remoteBackground": "#3e3657",
+          "statusBarItem.remoteHoverBackground": "#a98cf0"
+        },
+        "terminal.integrated.fontFamily": "'UbuntuMono Nerd Font'",
+        "terminal.integrated.fontSize": 16,
+        "terminal.integrated.fontWeight": "bold",
+        "terminal.integrated.copyOnSelection": true,
+        "terminal.integrated.drawBoldTextInBrightColors": true,
+        "terminal.integrated.tabs.defaultColor": "terminal.ansiCyan",
         "terminal.integrated.defaultProfile.linux": "zsh",
+        "terminal.integrated.tabs.defaultIcon": "terminal-ubuntu",
         "terminal.integrated.profiles.linux": {
           "zsh": {
-            "path": "/bin/zsh"
+            "path": "/usr/bin/zsh"
+          },
+          "ai":{
+            "path": "/usr/local/share/nvm/versions/node/v24.16.0/bin/claude",
+            "args": ["--permission-mode", "bypassPermissions"],
+            "icon": "claude",
+            "color": "terminal.ansiYellow"
           }
         }
       }
