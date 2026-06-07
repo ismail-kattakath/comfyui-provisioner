@@ -23,10 +23,15 @@
 #   2  healed or needs attention (e.g. >1 running instance, unknown folder suffix)
 #   1  hard failure (can't reach instance, daemon won't start)
 #
-# Folder suffix → local subdir mapping:
-#   *-logs       → logs/      (receiveonly)
-#   *-workflows  → comfyui/   (receiveonly)
-#   (unknown suffix → warn, skip, exit 2)
+# Canonical folder set (ensured deterministically on BOTH sides every run):
+#   suffix     instance path                   local subdir  inst type    container type
+#   logs       /var/log/portal                 logs/         sendonly     receiveonly
+#   workflows  $COMFY/user/default/workflows   comfyui/      sendonly     receiveonly
+#   output     $COMFY/output                   output/       sendonly     receiveonly
+#   input      $COMFY/input                    input/        receiveonly  sendonly
+#   ($COMFY = instance ComfyUI dir; default /workspace/ComfyUI, INSTANCE_COMFY_DIR override)
+#   Folder id convention: comfyui-<suffix>. Existing instance folders whose id
+#   ends in -<suffix> are reused (their path is preserved).
 #
 # Syncthing config: /comfy/.syncthing (persistent named volume; stable device ID)
 # GUI/REST:         127.0.0.1:18384
@@ -41,6 +46,13 @@ CFG="${SYNCTHING_CONFIG_DIR:-/comfy/.syncthing}"
 GUI="127.0.0.1:18384"
 MARKER=".syncthing-instance"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Instance ComfyUI dir — base for the canonical INSTANCE-side paths.
+# NOTE: deliberately NOT derived from COMFYUI_DIR — that variable points at the
+# *container's* ComfyUI checkout (e.g. /home/vscode/comfy/ComfyUI) and would
+# produce a wrong path on the instance. Override only with INSTANCE_COMFY_DIR
+# when an instance uses a non-default layout.
+COMFY="${INSTANCE_COMFY_DIR:-/workspace/ComfyUI}"
 
 # ── mode flags ────────────────────────────────────────────────────────────────
 MODE=heal        # heal | check | troubleshoot
@@ -89,17 +101,44 @@ STACK_DIR="$(resolve_stack "$STACK_ARG")" || {
 STACK_NAME="$(basename "$STACK_DIR")"
 log "stack: $STACK_DIR"
 
-# ── folder suffix → local path mapping ───────────────────────────────────────
-# Returns: "local_subdir:type" for a folder id, empty string if unknown.
-map_folder_suffix() {
-  local id="$1"
-  case "$id" in
-    *-logs)      printf '%s\n' "logs/:receiveonly" ;;
-    *-workflows) printf '%s\n' "comfyui/:receiveonly" ;;
-    *-output)    printf '%s\n' "output/:receiveonly" ;;
-    *-input)     printf '%s\n' "input/:sendonly" ;;
-    *)           printf '' ;;
+# ── canonical folder set (single source of truth) ────────────────────────────
+# The full set of folders /sync-wire deterministically ensures for ANY stack.
+# This is the ONLY place direction/path logic lives — nothing scattered elsewhere.
+#
+# Iteration order matters only for log readability.
+CANONICAL_SUFFIXES=(logs workflows output input)
+
+# canonical_spec <suffix> → prints "instance_path|local_subdir|instance_type|container_type"
+# Empty string for an unknown suffix.
+#   $COMFY = instance ComfyUI dir (default /workspace/ComfyUI; INSTANCE_COMFY_DIR override)
+canonical_spec() {
+  local suffix="$1"
+  case "$suffix" in
+    logs)      printf '%s\n' "/var/log/portal|logs/|sendonly|receiveonly" ;;
+    workflows) printf '%s\n' "$COMFY/user/default/workflows|comfyui/|sendonly|receiveonly" ;;
+    output)    printf '%s\n' "$COMFY/output|output/|sendonly|receiveonly" ;;
+    input)     printf '%s\n' "$COMFY/input|input/|receiveonly|sendonly" ;;
+    *)         printf '' ;;
   esac
+}
+
+# map_folder_suffix <folder_id> → "local_subdir:container_type" (or "" if unknown)
+# Compatibility shim used by the troubleshoot conflict scan, which works off
+# instance-advertised folder ids. Derives the suffix and reuses canonical_spec
+# so direction logic stays in one place.
+map_folder_suffix() {
+  local id="$1" suffix="" spec=""
+  case "$id" in
+    *-logs)      suffix=logs ;;
+    *-workflows) suffix=workflows ;;
+    *-output)    suffix=output ;;
+    *-input)     suffix=input ;;
+    *)           printf ''; return ;;
+  esac
+  spec="$(canonical_spec "$suffix")"
+  [[ -z "$spec" ]] && { printf ''; return; }
+  IFS='|' read -r _ipath local_subdir _itype ctype <<< "$spec"
+  printf '%s\n' "${local_subdir}:${ctype}"
 }
 
 # ── resolve instance id ───────────────────────────────────────────────────────
@@ -338,26 +377,48 @@ fi
 EXIT_CODE=0
 HEALED=0
 
-for FOLDER_ID in "${INST_FOLDER_IDS[@]:-}"; do
-  INST_PATH="${INST_FOLDER_PATHS[$FOLDER_ID]:-}"
-  INST_TYPE="${INST_FOLDER_TYPES[$FOLDER_ID]:-}"
-
-  MAPPING="$(map_folder_suffix "$FOLDER_ID")"
-  if [[ -z "$MAPPING" ]]; then
-    warn "unknown folder suffix for '$FOLDER_ID' (path=$INST_PATH) — skipping; add a mapping if needed"
-    EXIT_CODE=2
-    continue
+# Remove default junk folder once up-front (was previously inside the loop).
+if [[ "$MODE" != check ]] && [[ -n "${ST_APIKEY:-}" ]]; then
+  if st config folders list 2>/dev/null | grep -qxF "default"; then
+    log "removing default junk folder from container"
+    st config folders default delete >/dev/null 2>&1 || true
+    HEALED=1
   fi
+fi
 
-  LOCAL_SUBDIR="${MAPPING%%:*}"
-  LOCAL_TYPE="${MAPPING##*:}"
+# Iterate the CANONICAL set — create missing folders on BOTH sides with the
+# correct direction, not just reconcile what the instance already advertises.
+for SUFFIX in "${CANONICAL_SUFFIXES[@]}"; do
+  SPEC="$(canonical_spec "$SUFFIX")"
+  [[ -z "$SPEC" ]] && continue
+  IFS='|' read -r CANON_INST_PATH LOCAL_SUBDIR INST_TYPE LOCAL_TYPE <<< "$SPEC"
+
+  # Reuse an instance folder whose id ends in -<suffix> if one is advertised
+  # (its path may legitimately differ, e.g. logs/workflows); otherwise create
+  # the canonical id at the canonical path.
+  FOLDER_ID="comfyui-$SUFFIX"
+  INST_PATH="$CANON_INST_PATH"
+  INST_HAS_FOLDER=0
+  for existing in "${INST_FOLDER_IDS[@]:-}"; do
+    if [[ "$existing" == *-"$SUFFIX" ]]; then
+      FOLDER_ID="$existing"
+      INST_PATH="${INST_FOLDER_PATHS[$existing]:-$CANON_INST_PATH}"
+      INST_HAS_FOLDER=1
+      break
+    fi
+  done
+
   LOCAL_PATH="$STACK_DIR/$LOCAL_SUBDIR"
   mkdir -p "$LOCAL_PATH"
 
-  log "folder $FOLDER_ID: instance=$INST_PATH ($INST_TYPE) -> local=$LOCAL_PATH ($LOCAL_TYPE)"
+  log "folder $FOLDER_ID [$SUFFIX]: instance=$INST_PATH ($INST_TYPE) -> local=$LOCAL_PATH ($LOCAL_TYPE)"
 
   if [[ "$MODE" = check ]]; then
     # check only — no mutations
+    if [[ "$INST_HAS_FOLDER" -eq 0 ]]; then
+      warn "instance missing folder for suffix '$SUFFIX' (needs heal)"
+      EXIT_CODE=2
+    fi
     if [[ -n "$ST_APIKEY" ]]; then
       HAS_FOLDER="$(st config folders list 2>/dev/null | grep -cF "$FOLDER_ID" || true)"
       if [[ "$HAS_FOLDER" -eq 0 ]]; then
@@ -366,7 +427,7 @@ for FOLDER_ID in "${INST_FOLDER_IDS[@]:-}"; do
       else
         CURRENT_PATH="$(st config folders "$FOLDER_ID" path get 2>/dev/null || true)"
         CURRENT_TYPE="$(st config folders "$FOLDER_ID" type get 2>/dev/null || true)"
-        if [[ "$CURRENT_PATH" != "$LOCAL_PATH" ]]; then
+        if [[ "${CURRENT_PATH%/}" != "${LOCAL_PATH%/}" ]]; then
           warn "folder $FOLDER_ID path mismatch: got=$CURRENT_PATH want=$LOCAL_PATH (needs heal)"
           EXIT_CODE=2
         fi
@@ -379,14 +440,48 @@ for FOLDER_ID in "${INST_FOLDER_IDS[@]:-}"; do
     continue
   fi
 
-  # ── heal: ensure container folder ─────────────────────────────────────────
-  # Remove default junk folder if present
-  if st config folders list 2>/dev/null | grep -qxF "default"; then
-    log "removing default junk folder from container"
-    st config folders default delete >/dev/null 2>&1 || true
-    HEALED=1
+  # ── heal: ensure INSTANCE folder exists (create if missing) ────────────────
+  # This is the generalized behavior: rather than only reconciling folders the
+  # instance already advertises, we ensure the canonical folder exists there.
+  if [[ "$INST_HAS_FOLDER" -eq 0 ]]; then
+    log "creating instance folder $FOLDER_ID -> $INST_PATH ($INST_TYPE)"
+    INST_CREATE_OUT="$("${SSH[@]}" "
+      ST_KEY=\$(grep -oP '(?<=<apikey>)[^<]+' /opt/syncthing/config/config.xml | head -1)
+      ST(){ /opt/syncthing/syncthing cli --gui-address=127.0.0.1:18384 --gui-apikey=\"\$ST_KEY\" \"\$@\"; }
+      mkdir -p '$INST_PATH'
+      if ! ST config folders list 2>/dev/null | grep -qxF '$FOLDER_ID'; then
+        ST config folders add --id '$FOLDER_ID' --label '$FOLDER_ID' \
+          --path '$INST_PATH' --type '$INST_TYPE' >/dev/null
+        echo 'CREATED'
+      fi
+    " 2>/dev/null || true)"
+    if printf '%s\n' "$INST_CREATE_OUT" | grep -q '^CREATED'; then
+      log "instance folder $FOLDER_ID created"
+      INST_HAS_FOLDER=1
+      HEALED=1
+    else
+      warn "could not create instance folder $FOLDER_ID (see SSH output)"
+      EXIT_CODE=2
+    fi
+  else
+    # Reused an existing instance folder — drift-correct its type only
+    # (path is intentionally left as-is; logs/workflows may differ legitimately).
+    INST_FIX_OUT="$("${SSH[@]}" "
+      ST_KEY=\$(grep -oP '(?<=<apikey>)[^<]+' /opt/syncthing/config/config.xml | head -1)
+      ST(){ /opt/syncthing/syncthing cli --gui-address=127.0.0.1:18384 --gui-apikey=\"\$ST_KEY\" \"\$@\"; }
+      CUR_TYPE=\$(ST config folders '$FOLDER_ID' type get 2>/dev/null || true)
+      if [[ \"\$CUR_TYPE\" != '$INST_TYPE' ]]; then
+        ST config folders '$FOLDER_ID' type set '$INST_TYPE' >/dev/null
+        echo 'FIXED-TYPE'
+      fi
+    " 2>/dev/null || true)"
+    if printf '%s\n' "$INST_FIX_OUT" | grep -q '^FIXED-TYPE'; then
+      log "instance folder $FOLDER_ID type corrected -> $INST_TYPE"
+      HEALED=1
+    fi
   fi
 
+  # ── heal: ensure container folder ─────────────────────────────────────────
   HAS_FOLDER="$(st config folders list 2>/dev/null | grep -cF "$FOLDER_ID" || true)"
   if [[ "$HAS_FOLDER" -eq 0 ]]; then
     log "adding container folder $FOLDER_ID -> $LOCAL_PATH ($LOCAL_TYPE)"
@@ -397,7 +492,9 @@ for FOLDER_ID in "${INST_FOLDER_IDS[@]:-}"; do
     # fix wrong path or type
     CURRENT_PATH="$(st config folders "$FOLDER_ID" path get 2>/dev/null || true)"
     CURRENT_TYPE="$(st config folders "$FOLDER_ID" type get 2>/dev/null || true)"
-    if [[ "$CURRENT_PATH" != "$LOCAL_PATH" ]]; then
+    # Compare paths trailing-slash-insensitively so we don't thrash on a stored
+    # "/output" vs canonical "/output/" (Syncthing treats them identically).
+    if [[ "${CURRENT_PATH%/}" != "${LOCAL_PATH%/}" ]]; then
       log "correcting folder $FOLDER_ID path: $CURRENT_PATH -> $LOCAL_PATH"
       st config folders "$FOLDER_ID" path set "$LOCAL_PATH"
       HEALED=1
@@ -446,6 +543,37 @@ for FOLDER_ID in "${INST_FOLDER_IDS[@]:-}"; do
     fi
   fi
 done
+
+# ── ensure stack .gitignore ignores synced binary dirs ───────────────────────
+# Deterministic for any stack: logs/, output/, input/ are always ignored.
+# comfyui/ is intentionally NOT added — workflows are tracked source.
+ensure_gitignore() {
+  local gi="$STACK_DIR/.gitignore"
+  local want=(logs/ output/ input/)
+  local added=()
+  [[ -f "$gi" ]] || : > "$gi"
+  local entry have
+  for entry in "${want[@]}"; do
+    have=0
+    # match the entry as its own line (ignore surrounding whitespace)
+    while IFS= read -r line; do
+      [[ "$(printf '%s' "$line" | tr -d '[:space:]')" == "$entry" ]] && { have=1; break; }
+    done < "$gi"
+    if [[ "$have" -eq 0 ]]; then
+      printf '%s\n' "$entry" >> "$gi"
+      added+=("$entry")
+    fi
+  done
+  if [[ "${#added[@]}" -gt 0 ]]; then
+    log "appended to $gi: ${added[*]}"
+  else
+    info ".gitignore already ignores logs/ output/ input/ (no-op)"
+  fi
+}
+
+if [[ "$MODE" != check ]]; then
+  ensure_gitignore
+fi
 
 # ── record instance id to marker file ────────────────────────────────────────
 if [[ "$MODE" != check ]]; then
